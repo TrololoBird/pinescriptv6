@@ -1,0 +1,772 @@
+//@version=6
+indicator("Prizrak Trade Setup Detector v11.7.0", shorttitle="Prizrak11", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=300, format=format.price, precision=2)
+
+// =========================
+// INPUTS
+// =========================
+group_main = "Основные модули"
+enable_accum    = input.bool(true, "Накопления", group=group_main)
+enable_poc      = input.bool(true, "POC-уровни", group=group_main)
+enable_stop_vol = input.bool(true, "Стоповый объём", group=group_main)
+enable_traps    = input.bool(true, "Ловушки/проколы", group=group_main)
+enable_choch    = input.bool(true, "CHOCH", group=group_main)
+enable_filters  = input.bool(true, "RSI/MACD фильтры", group=group_main)
+
+group_acc = "Накопления"
+touch_tolerance    = input.float(0.15, "Допуск касания границ (%)", step=0.01, minval=0.05, maxval=0.5, group=group_acc) / 100
+min_touches        = input.int(4, "Мин. касаний", minval=2, maxval=10, group=group_acc)
+min_touches_side   = input.int(2, "Мин. касаний на сторону", minval=1, maxval=10, group=group_acc)
+flat_max_range_pct = input.float(5.0, "Макс. диапазон флэта (%)", step=0.1, minval=0.5, maxval=30, group=group_acc) / 100
+flat_break_early   = input.float(0.5, "Лом структуры EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_acc) / 100
+flat_break_true    = input.float(1.0, "Лом структуры TRUE (%)", step=0.1, minval=0.1, maxval=5, group=group_acc) / 100
+exit_confirm_bars  = input.int(2, "Подтверждение выхода", minval=1, maxval=10, group=group_acc)
+flat_len_auto      = input.bool(true, "Авто-длина по ТФ", group=group_acc)
+flat_len_m15       = input.int(40, "M15", minval=10, maxval=400, group=group_acc)
+flat_len_h1        = input.int(60, "H1", minval=10, maxval=400, group=group_acc)
+flat_len_4h        = input.int(80, "H4", minval=10, maxval=600, group=group_acc)
+max_flat_bars_man  = input.int(150, "Manual", minval=20, maxval=1000, group=group_acc)
+
+group_poc = "POC"
+poc_bins           = input.int(30, "POC bins", minval=10, maxval=200, group=group_poc)
+max_poc_keep       = input.int(10, "Макс. POC", minval=1, maxval=50, group=group_poc)
+poc_dead_tests     = input.int(2, "Снять после N тестов", minval=1, maxval=10, group=group_poc)
+poc_test_tolerance = input.float(0.25, "Допуск теста (%)", step=0.05, minval=0.05, maxval=2, group=group_poc) / 100
+poc_price_mode     = input.string("HLC3", "Цена профиля", options=["CLOSE", "HL2", "HLC3", "VWAP"], group=group_poc)
+bin_min_pct        = input.float(0.05, "Мин. размер бина (%)", step=0.01, minval=0.01, maxval=1.0, group=group_poc) / 100
+
+group_stop = "Стоповый объём"
+stop_len             = input.int(30, "Длина окна", minval=10, maxval=400, group=group_stop)
+stop_max_range_pct   = input.float(2.0, "Макс диапазон (%)", step=0.1, minval=0.2, maxval=10, group=group_stop) / 100
+stop_vol_mult        = input.float(1.5, "Объём выше MA *", step=0.1, minval=0.5, maxval=10, group=group_stop)
+stop_break_early     = input.float(0.5, "Stop EARLY break (%)", step=0.1, minval=0.1, maxval=5, group=group_stop) / 100
+stop_detect_inside   = input.bool(true, "Детектировать внутри флэта", group=group_stop)
+stop_exit_confirm    = input.int(2, "Подтверждение выхода", minval=1, maxval=10, group=group_stop)
+stop_range_atr_mult  = input.float(1.25, "Диапазон <= ATR *", step=0.05, minval=0.2, maxval=5, group=group_stop)
+
+group_traps = "Ловушки"
+trap_max_bars = input.int(8, "Окно ловушки", minval=2, maxval=50, group=group_traps)
+trap_vol_drop = input.float(0.75, "Падение объёма от MA *", step=0.05, minval=0.1, maxval=2.0, group=group_traps)
+icon_cooldown = input.int(0, "Icon cooldown", minval=0, maxval=200, group=group_traps)
+
+group_choch = "CHOCH"
+htf              = input.timeframe("240", "HTF", group=group_choch)
+choch_pivot_len  = input.int(10, "Pivot length", minval=2, maxval=50, group=group_choch)
+choch_pivot_cap  = input.int(10, "Pivot cap", minval=2, maxval=200, group=group_choch)
+choch_break_early = input.float(0.5, "CHOCH EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
+choch_break_true  = input.float(1.0, "CHOCH TRUE (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
+
+group_filters = "Фильтры"
+rsi_len      = input.int(21, "RSI", minval=5, maxval=100, group=group_filters)
+macd_fast    = input.int(19, "MACD fast", minval=2, maxval=50, group=group_filters)
+macd_slow    = input.int(39, "MACD slow", minval=5, maxval=100, group=group_filters)
+macd_sig     = input.int(9, "MACD signal", minval=2, maxval=50, group=group_filters)
+
+group_setups = "Сетапы"
+test_atr_frac      = input.float(0.30, "ATR proximity", step=0.05, minval=0.05, maxval=3, group=group_setups)
+allow_counter      = input.bool(false, "Разрешить контртренд", group=group_setups)
+rr_gate_enabled    = input.bool(true, "RR gate", group=group_setups)
+rr_min             = input.float(2.5, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
+rr_main_mult       = input.float(1.618, "Main TP mult", step=0.001, minval=0.1, maxval=10, group=group_setups)
+rr_ext_mult        = input.float(2.618, "Ext TP mult", step=0.001, minval=0.1, maxval=20, group=group_setups)
+
+
+group_vis = "Визуализация"
+clean_mode       = input.bool(false, "Clean mode", group=group_vis)
+show_boxes       = input.bool(false, "Флэт-боксы", group=group_vis)
+show_working_lvl = input.bool(true, "Рабочий уровень", group=group_vis)
+show_poc_lines   = input.bool(true, "Исторические POC", group=group_vis)
+show_stop_line   = input.bool(true, "Линия стопа", group=group_vis)
+show_squeeze     = input.bool(true, "Squeeze", group=group_vis)
+target_preset    = input.bool(false, "Target preset", group=group_vis)
+
+group_rr = "RR Overlay"
+show_rr_history = input.bool(true, "Show RR history", group=group_rr)
+rr_show_stat    = input.bool(true, "Show RR result labels", group=group_rr)
+rr_draw_open    = input.bool(true, "Draw open trade", group=group_rr)
+rr_open_extend  = input.int(5, "Open extend", minval=0, maxval=200, group=group_rr)
+rr_hist_keep    = input.int(80, "History keep", minval=5, maxval=200, group=group_rr)
+
+zone_opacity_eff = target_preset ? 82 : 85
+line_w_eff = target_preset ? 2 : 3
+border_w_eff = target_preset ? 2 : 1
+label_sz_eff = target_preset ? size.normal : size.small
+
+skin_buy_fill = color.new(color.teal, zone_opacity_eff)
+skin_sell_fill = color.new(color.purple, zone_opacity_eff)
+skin_stop_fill = color.new(color.red, target_preset ? 82 : 85)
+skin_take_fill = color.new(color.green, target_preset ? 82 : 85)
+skin_take2_fill = color.new(color.teal, target_preset ? 84 : 87)
+skin_poc_fill = color.new(color.blue, target_preset ? 87 : 90)
+skin_edge_col = color.new(color.black, 0)
+skin_text_col = color.new(color.white, 0)
+skin_poc_line = color.new(color.yellow, 0)
+skin_dead_line = color.new(color.gray, 75)
+skin_trap_col = color.new(color.orange, 0)
+skin_choch_col = color.new(color.fuchsia, 0)
+skin_label_size = label_sz_eff
+skin_line_w = line_w_eff
+skin_border_w = border_w_eff
+
+rr_cStop    = skin_stop_fill
+rr_cTake    = skin_take_fill
+rr_cTake2   = skin_take2_fill
+rr_cEdge    = skin_edge_col
+rr_cEntry   = color.new(color.yellow, 0)
+rr_cTagRisk = color.new(color.orange, 0)
+rr_cTagPnl  = color.new(color.green, 0)
+
+// =========================
+// HELPERS
+// =========================
+f_fmt(float p) => str.tostring(p, format.mintick)
+f_clamp_int(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
+
+f_box(box _bx, int _x1, float _y1, int _x2, float _y2, color _bg, color _bd, int _bw) =>
+    box out = _bx
+    if na(out)
+        out := box.new(_x1, _y1, _x2, _y2, bgcolor=_bg, border_color=_bd, border_width=_bw)
+    else
+        box.set_left(out, _x1)
+        box.set_right(out, _x2)
+        box.set_top(out, _y1)
+        box.set_bottom(out, _y2)
+        box.set_bgcolor(out, _bg)
+        box.set_border_color(out, _bd)
+        box.set_border_width(out, _bw)
+    out
+
+f_line(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w) =>
+    line out = _ln
+    if na(out)
+        out := line.new(_x1, _y1, _x2, _y2, color=_c, width=_w)
+    else
+        line.set_xy1(out, _x1, _y1)
+        line.set_xy2(out, _x2, _y2)
+        line.set_color(out, _c)
+        line.set_width(out, _w)
+    out
+
+f_label(label _lb, int _x, float _y, string _txt, label_style _style, color _bg, color _tc, size _sz) =>
+    label out = _lb
+    if na(out)
+        out := label.new(_x, _y, _txt, style=_style, color=_bg, textcolor=_tc, size=_sz)
+    else
+        label.set_xy(out, _x, _y)
+        label.set_text(out, _txt)
+        label.set_style(out, _style)
+        label.set_color(out, _bg)
+        label.set_textcolor(out, _tc)
+        label.set_size(out, _sz)
+    out
+
+f_box_norm(box _bx, int _x1, float _a, int _x2, float _b, color _bg, color _bd, int _bw) =>
+    float top = math.max(_a, _b)
+    float bot = math.min(_a, _b)
+    f_box(_bx, _x1, top, _x2, bot, _bg, _bd, _bw)
+
+f_rr_pct(float _entry, float _exit, float _stopOrig) =>
+    float risk = math.abs(_entry - _stopOrig)
+    risk > 0 ? (_exit - _entry) / risk : na
+
+f_rr_res_text(string _dir, string _res) =>
+    _dir + " " + _res
+
+f_rr_draw_one(int _x1, int _x2, string _dir, float _entry, float _stopOrig, float _takeMain, float _takeExt, string _res, box _stopBox, box _takeBox, box _take2Box, line _entryLine, label _statLabel, bool _showStat) =>
+    box stopBoxOut = _stopBox
+    box takeBoxOut = _takeBox
+    box take2BoxOut = _take2Box
+    line entryLineOut = _entryLine
+    label statLabelOut = _statLabel
+    if not na(_entry) and not na(_stopOrig) and not na(_takeMain)
+        stopBoxOut := f_box_norm(stopBoxOut, _x1, _entry, _x2, _stopOrig, rr_cStop, skin_edge_col, skin_border_w)
+        takeBoxOut := f_box_norm(takeBoxOut, _x1, _entry, _x2, _takeMain, rr_cTake, skin_edge_col, skin_border_w)
+        if not na(_takeExt)
+            take2BoxOut := f_box_norm(take2BoxOut, _x1, _takeMain, _x2, _takeExt, rr_cTake2, skin_edge_col, skin_border_w)
+        else
+            if not na(take2BoxOut)
+                box.delete(take2BoxOut)
+                take2BoxOut := na
+        entryLineOut := f_line(entryLineOut, _x1, _entry, _x2, _entry, rr_cEntry, skin_line_w)
+        if _showStat
+            float rrv = f_rr_pct(_entry, _takeMain, _stopOrig)
+            string txt = f_rr_res_text(_dir, _res) + (not na(rrv) ? " | RR " + str.tostring(rrv, "#.##") : "")
+            color tagColor = str.contains(_res, "SL") ? rr_cTagRisk : rr_cTagPnl
+            statLabelOut := f_label(statLabelOut, _x2, _entry, txt, label.style_label_left, tagColor, skin_text_col, skin_label_size)
+        else
+            if not na(statLabelOut)
+                label.delete(statLabelOut)
+                statLabelOut := na
+    [stopBoxOut, takeBoxOut, take2BoxOut, entryLineOut, statLabelOut]
+
+f_bar_price(int off) =>
+    float p = na
+    if poc_price_mode == "CLOSE"
+        p := close[off]
+    else if poc_price_mode == "HL2"
+        p := (high[off] + low[off]) / 2.0
+    else
+        p := (high[off] + low[off] + close[off]) / 3.0
+    p
+
+f_bin_size(float lo, float hi) =>
+    float rng = hi - lo
+    float min_bin = math.max(rng * bin_min_pct, syminfo.mintick)
+    math.max(rng / poc_bins, min_bin)
+
+calculatePOC(int start_bar, int end_bar, float lo, float hi) =>
+    float rng = hi - lo
+    if rng <= 0 or poc_bins <= 1
+        na
+    else
+        float bsz = f_bin_size(lo, hi)
+        int bins_actual = int(math.max(2, math.ceil((hi - lo) / bsz)))
+        array<float> vols = array.new_float(bins_actual, 0.0)
+        float cum_pv = 0.0
+        float cum_v = 0.0
+        for b = start_bar to end_bar
+            int off = bar_index - b
+            if off >= 0
+                float bv = volume[off]
+                if not na(bv) and bv > 0
+                    float bp = na
+                    if poc_price_mode == "VWAP"
+                        float tp = (high[off] + low[off] + close[off]) / 3.0
+                        cum_pv += tp * bv
+                        cum_v += bv
+                        bp := cum_v > 0 ? (cum_pv / cum_v) : tp
+                    else
+                        bp := f_bar_price(off)
+                    if not na(bp) and bp >= lo and bp <= hi
+                        int idx = int(math.floor((bp - lo) / bsz))
+                        idx := f_clamp_int(idx, 0, bins_actual - 1)
+                        array.set(vols, idx, array.get(vols, idx) + bv)
+        float maxv = 0.0
+        float poc = na
+        for i = 0 to bins_actual - 1
+            float v = array.get(vols, i)
+            if v > maxv
+                maxv := v
+                poc := lo + (i + 0.5) * bsz
+        poc
+
+// =========================
+// TECH DATA
+// =========================
+is_m15 = timeframe.isminutes and timeframe.multiplier == 15
+is_h1  = timeframe.isminutes and timeframe.multiplier == 60
+is_4h  = timeframe.isminutes and timeframe.multiplier == 240
+max_flat_bars = flat_len_auto ? (is_m15 ? flat_len_m15 : is_h1 ? flat_len_h1 : is_4h ? flat_len_4h : max_flat_bars_man) : max_flat_bars_man
+
+atr = ta.atr(14)
+vol_ma = ta.sma(volume, 50)
+rsi = ta.rsi(close, rsi_len)
+[macd_line, macd_signal, _] = ta.macd(close, macd_fast, macd_slow, macd_sig)
+
+squeeze = (high - low) >= atr * 2 and volume >= vol_ma * 1.5
+barcolor(show_squeeze and not clean_mode and squeeze ? color.new(color.yellow, 70) : na)
+
+// =========================
+// STATE
+// =========================
+var bool in_flat = false
+var int flat_start = na
+var float flat_high = na
+var float flat_low = na
+var int touches_top = 0
+var int touches_bottom = 0
+var int exit_confirm_cnt = 0
+
+var float last_flat_high = na
+var float last_flat_low = na
+var bool last_flat_valid = false
+
+var array<float> poc_prices = array.new_float()
+var array<int> poc_bars = array.new_int()
+var array<int> poc_tests = array.new_int()
+
+var bool in_stop = false
+var int stop_start = na
+var float stop_high = na
+var float stop_low = na
+var int stop_exit_cnt = 0
+
+var int last_break_bar = na
+var string last_break_dir = ""
+
+var bool choch_active = false
+var int choch_kind = 0
+
+var bool position_active = false
+var string position_dir = ""
+var float entry_price = na
+var float stop_price = na
+var float tp_main = na
+var float tp_ext = na
+var float breakeven_price = na
+
+var bool open_active = false
+var string open_dir = ""
+var float open_entry = na
+var float open_stopOrig = na
+var float open_takeMain = na
+var float open_takeExt = na
+var int open_entryBar = na
+var int open_lastBar = na
+
+var array<string> log_dir = array.new_string()
+var array<float> log_entry = array.new_float()
+var array<float> log_exit = array.new_float()
+var array<float> log_rr = array.new_float()
+var array<string> log_res = array.new_string()
+var array<int> log_entryBar = array.new_int()
+var array<int> log_exitBar = array.new_int()
+var array<float> log_stopOrig = array.new_float()
+var array<float> log_takeMain = array.new_float()
+var array<float> log_takeExt = array.new_float()
+
+var int last_trap_up_icon_bar = na
+var int last_trap_down_icon_bar = na
+var int last_choch_icon_bar = na
+
+// =========================
+// ACCUMULATION
+// =========================
+cand_high = ta.highest(high, max_flat_bars)
+cand_low = ta.lowest(low, max_flat_bars)
+cand_rng = cand_high - cand_low
+cand_rng_pct = cand_rng / math.max(cand_low, syminfo.mintick)
+
+cand_touch_top = 0
+cand_touch_bot = 0
+if enable_accum and not in_flat and bar_index >= max_flat_bars
+    for i = 0 to max_flat_bars - 1
+        cand_touch_top += high[i] >= cand_high * (1 - touch_tolerance) ? 1 : 0
+        cand_touch_bot += low[i] <= cand_low * (1 + touch_tolerance) ? 1 : 0
+
+cand_ok = enable_accum and not in_flat and bar_index >= max_flat_bars and cand_rng_pct <= flat_max_range_pct and cand_touch_top + cand_touch_bot >= min_touches and cand_touch_top >= min_touches_side and cand_touch_bot >= min_touches_side
+if cand_ok
+    in_flat := true
+    flat_start := bar_index - max_flat_bars + 1
+    flat_high := cand_high
+    flat_low := cand_low
+    touches_top := cand_touch_top
+    touches_bottom := cand_touch_bot
+    exit_confirm_cnt := 0
+
+if in_flat
+    outside_early = high > flat_high * (1 + flat_break_early) or low < flat_low * (1 - flat_break_early)
+    outside_true = high > flat_high * (1 + flat_break_true) or low < flat_low * (1 - flat_break_true)
+    outside_any = close > flat_high or close < flat_low
+
+    touch_top = high >= flat_high * (1 - touch_tolerance) and high <= flat_high * (1 + touch_tolerance)
+    touch_bot = low >= flat_low * (1 - touch_tolerance) and low <= flat_low * (1 + touch_tolerance)
+    touches_top += touch_top ? 1 : 0
+    touches_bottom += touch_bot ? 1 : 0
+
+    if outside_any and not outside_early
+        exit_confirm_cnt += 1
+    else
+        exit_confirm_cnt := 0
+
+    bool finalize = outside_early or outside_true or exit_confirm_cnt >= exit_confirm_bars or (bar_index - flat_start) > max_flat_bars
+    if finalize
+        bool flat_valid = (touches_top + touches_bottom) >= min_touches
+        if enable_poc and flat_valid
+            float fpoc = calculatePOC(flat_start, math.max(flat_start, bar_index - 1), flat_low, flat_high)
+            if not na(fpoc)
+                array.push(poc_prices, fpoc)
+                array.push(poc_bars, bar_index)
+                array.push(poc_tests, 0)
+                if array.size(poc_prices) > max_poc_keep
+                    array.shift(poc_prices)
+                    array.shift(poc_bars)
+                    array.shift(poc_tests)
+        last_flat_high := flat_high
+        last_flat_low := flat_low
+        last_flat_valid := flat_valid
+        in_flat := false
+        flat_start := na
+        flat_high := na
+        flat_low := na
+        touches_top := 0
+        touches_bottom := 0
+        exit_confirm_cnt := 0
+
+// =========================
+// STOP VOLUME
+// =========================
+s_hi = ta.highest(high, stop_len)
+s_lo = ta.lowest(low, stop_len)
+s_rng = s_hi - s_lo
+s_rng_pct = s_rng / math.max(s_lo, syminfo.mintick)
+s_vol_sum = math.sum(volume, stop_len)
+
+if enable_stop_vol and not in_stop and bar_index >= stop_len
+    bool rng_ok = s_rng_pct <= stop_max_range_pct and s_rng <= atr * stop_range_atr_mult
+    bool vol_ok = s_vol_sum >= vol_ma * stop_vol_mult * stop_len
+    bool flat_ok = not in_flat or stop_detect_inside
+    if rng_ok and vol_ok and flat_ok
+        in_stop := true
+        stop_start := bar_index - stop_len + 1
+        stop_high := s_hi
+        stop_low := s_lo
+        stop_exit_cnt := 0
+
+if in_stop
+    stop_out_early = high > stop_high * (1 + stop_break_early) or low < stop_low * (1 - stop_break_early)
+    stop_out_any = close > stop_high or close < stop_low
+    if stop_out_any and not stop_out_early
+        stop_exit_cnt += 1
+    else
+        stop_exit_cnt := 0
+    if stop_out_early or stop_exit_cnt >= stop_exit_confirm
+        if enable_poc
+            sv_poc = calculatePOC(stop_start, math.max(stop_start, bar_index - 1), stop_low, stop_high)
+            if not na(sv_poc)
+                array.push(poc_prices, sv_poc)
+                array.push(poc_bars, bar_index)
+                array.push(poc_tests, 0)
+        in_stop := false
+        stop_start := na
+        stop_high := na
+        stop_low := na
+        stop_exit_cnt := 0
+
+// =========================
+// CHOCH
+// =========================
+[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], lookahead=barmerge.lookahead_off)
+var array<float> htf_highs = array.new_float()
+var array<float> htf_lows = array.new_float()
+if not na(htf_ph)
+    array.push(htf_highs, htf_ph)
+    if array.size(htf_highs) > choch_pivot_cap
+        array.shift(htf_highs)
+if not na(htf_pl)
+    array.push(htf_lows, htf_pl)
+    if array.size(htf_lows) > choch_pivot_cap
+        array.shift(htf_lows)
+
+htf_ready = array.size(htf_highs) >= 2 and array.size(htf_lows) >= 2
+htf_trend_up = false
+htf_trend_down = false
+htf_last_hh = na
+htf_last_ll = na
+if htf_ready
+    htf_last_hh := array.get(htf_highs, array.size(htf_highs) - 1)
+    htf_prev_hh = array.get(htf_highs, array.size(htf_highs) - 2)
+    htf_last_ll := array.get(htf_lows, array.size(htf_lows) - 1)
+    htf_prev_ll = array.get(htf_lows, array.size(htf_lows) - 2)
+    htf_trend_up := htf_last_ll > htf_prev_ll
+    htf_trend_down := htf_last_hh < htf_prev_hh
+
+if enable_choch and htf_ready
+    bool choch_cross_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_early))
+    bool choch_cross_up = ta.crossover(close, htf_last_hh * (1 + choch_break_early))
+    choch_active := (htf_trend_up and choch_cross_dn) or (htf_trend_down and choch_cross_up)
+    choch_kind := htf_trend_up and choch_cross_dn ? 2 : htf_trend_down and choch_cross_up ? 4 : 0
+
+// =========================
+// WORKING LEVEL + TESTS + TRAPS
+// =========================
+if enable_poc and array.size(poc_prices) > 0
+    for i = 0 to array.size(poc_prices) - 1
+        lvl = array.get(poc_prices, i)
+        tests = array.get(poc_tests, i)
+        if bar_index > array.get(poc_bars, i)
+            hiTol = lvl * (1 + poc_test_tolerance)
+            loTol = lvl * (1 - poc_test_tolerance)
+            touched = high >= loTol and low <= hiTol
+            if touched
+                array.set(poc_tests, i, tests + 1)
+
+float working_level = na
+if array.size(poc_prices) > 0
+    for j = 0 to array.size(poc_prices) - 1
+        i = array.size(poc_prices) - 1 - j
+        if array.get(poc_tests, i) < poc_dead_tests
+            working_level := array.get(poc_prices, i)
+            break
+
+bool work_cross_up = not na(working_level) ? ta.crossover(close, working_level) : false
+bool work_cross_dn = not na(working_level) ? ta.crossunder(close, working_level) : false
+
+if enable_traps and not na(working_level)
+    brk_up = close > working_level and close[1] <= working_level and volume > vol_ma * 1.2
+    brk_dn = close < working_level and close[1] >= working_level and volume > vol_ma * 1.2
+    if brk_up
+        last_break_bar := bar_index
+        last_break_dir := "up"
+    if brk_dn
+        last_break_bar := bar_index
+        last_break_dir := "down"
+
+trap_up = false
+trap_down = false
+if not na(last_break_bar) and not na(working_level)
+    in_window = (bar_index - last_break_bar) <= trap_max_bars
+    trap_up := last_break_dir == "up" and in_window and close < working_level and volume < vol_ma * trap_vol_drop
+    trap_down := last_break_dir == "down" and in_window and close > working_level and volume < vol_ma * trap_vol_drop
+
+bool trap_up_icon = trap_up and (icon_cooldown == 0 or na(last_trap_up_icon_bar) or (bar_index - last_trap_up_icon_bar >= icon_cooldown))
+bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_icon_bar) or (bar_index - last_trap_down_icon_bar >= icon_cooldown))
+bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
+bool choch_icon = choch_true_evt and (icon_cooldown == 0 or na(last_choch_icon_bar) or (bar_index - last_choch_icon_bar >= icon_cooldown))
+if trap_up_icon
+    last_trap_up_icon_bar := bar_index
+if trap_down_icon
+    last_trap_down_icon_bar := bar_index
+if choch_icon
+    last_choch_icon_bar := bar_index
+
+// =========================
+// FILTERS + SETUPS
+// =========================
+hidden_bull  = rsi > rsi[1] and low < low[1]
+hidden_bear  = rsi < rsi[1] and high > high[1]
+classic_bull = rsi < rsi[1] and low < low[1]
+classic_bear = rsi > rsi[1] and high > high[1]
+macd_bull = macd_line > macd_signal
+macd_bear = macd_line < macd_signal
+
+bull_ok = not enable_filters or ((hidden_bull or classic_bull or macd_bull) and not hidden_bear and not classic_bear and not macd_bear)
+bear_ok = not enable_filters or ((hidden_bear or classic_bear or macd_bear) and not hidden_bull and not classic_bull and not macd_bull)
+
+float atr_ref = atr
+near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref * test_atr_frac : false
+buy_setup = not choch_active and work_cross_up and (htf_trend_up or allow_counter) and bull_ok and near_level
+sell_setup = not choch_active and work_cross_dn and (htf_trend_down or allow_counter) and bear_ok and near_level
+
+open_buy = buy_setup
+open_sell = sell_setup
+if rr_gate_enabled and (open_buy or open_sell)
+    float st_buy = not na(last_flat_low) and last_flat_valid ? last_flat_low : close - atr
+    float st_sell = not na(last_flat_high) and last_flat_valid ? last_flat_high : close + atr
+    float risk_buy = math.abs(close - st_buy)
+    float risk_sell = math.abs(close - st_sell)
+    float tp_buy_main = close + risk_buy * rr_main_mult
+    float tp_sell_main = close - risk_sell * rr_main_mult
+    bool rr_ok_buy = risk_buy > 0 ? (math.abs(tp_buy_main - close) / risk_buy >= rr_min) : false
+    bool rr_ok_sell = risk_sell > 0 ? (math.abs(close - tp_sell_main) / risk_sell >= rr_min) : false
+    open_buy := open_buy and rr_ok_buy
+    open_sell := open_sell and rr_ok_sell
+
+if not position_active and (open_buy or open_sell)
+    position_active := true
+    position_dir := open_buy ? "BUY" : "SELL"
+    entry_price := close
+    stop_price := position_dir == "BUY" ? (not na(last_flat_low) and last_flat_valid ? last_flat_low : close - atr) : (not na(last_flat_high) and last_flat_valid ? last_flat_high : close + atr)
+    float risk = math.abs(entry_price - stop_price)
+    tp_main := position_dir == "BUY" ? entry_price + risk * rr_main_mult : entry_price - risk * rr_main_mult
+    tp_ext := position_dir == "BUY" ? entry_price + risk * rr_ext_mult : entry_price - risk * rr_ext_mult
+    breakeven_price := na
+
+    open_active := true
+    open_dir := position_dir
+    open_entry := entry_price
+    open_stopOrig := stop_price
+    open_takeMain := tp_main
+    open_takeExt := tp_ext
+    open_entryBar := bar_index
+    open_lastBar := bar_index
+
+if position_active
+    open_lastBar := bar_index
+    float risk = math.abs(entry_price - open_stopOrig)
+    float tp1 = position_dir == "BUY" ? entry_price + risk : entry_price - risk
+    bool tp1_hit = position_dir == "BUY" ? high >= tp1 : low <= tp1
+    if tp1_hit and na(breakeven_price)
+        breakeven_price := entry_price
+        stop_price := entry_price
+
+    bool tp_main_hit = position_dir == "BUY" ? high >= tp_main : low <= tp_main
+    bool tp_ext_hit = position_dir == "BUY" ? high >= tp_ext : low <= tp_ext
+    bool stop_hit = position_dir == "BUY" ? low <= stop_price : high >= stop_price
+
+    if tp_ext_hit or tp_main_hit or stop_hit
+        float exit_price = tp_ext_hit ? tp_ext : tp_main_hit ? tp_main : stop_price
+        string exit_res = tp_ext_hit ? "TP2" : tp_main_hit ? "TP1" : "SL"
+        float rr_res = f_rr_pct(open_entry, exit_price, open_stopOrig)
+
+        array.push(log_dir, open_dir)
+        array.push(log_entry, open_entry)
+        array.push(log_exit, exit_price)
+        array.push(log_rr, rr_res)
+        array.push(log_res, exit_res)
+        array.push(log_entryBar, open_entryBar)
+        array.push(log_exitBar, bar_index)
+        array.push(log_stopOrig, open_stopOrig)
+        array.push(log_takeMain, open_takeMain)
+        array.push(log_takeExt, open_takeExt)
+
+        while array.size(log_dir) > rr_hist_keep
+            array.shift(log_dir)
+            array.shift(log_entry)
+            array.shift(log_exit)
+            array.shift(log_rr)
+            array.shift(log_res)
+            array.shift(log_entryBar)
+            array.shift(log_exitBar)
+            array.shift(log_stopOrig)
+            array.shift(log_takeMain)
+            array.shift(log_takeExt)
+
+        position_active := false
+        position_dir := ""
+        entry_price := na
+        stop_price := na
+        tp_main := na
+        tp_ext := na
+        breakeven_price := na
+
+        open_active := false
+        open_dir := ""
+        open_entry := na
+        open_stopOrig := na
+        open_takeMain := na
+        open_takeExt := na
+        open_entryBar := na
+        open_lastBar := na
+
+// =========================
+// VISUALS
+// =========================
+bool flat_valid_now = in_flat and (touches_top + touches_bottom >= min_touches)
+var box flatBox = na
+if not clean_mode and show_boxes and in_flat and not na(flat_start) and not na(flat_high) and not na(flat_low) and flat_valid_now
+    flatBox := f_box(flatBox, flat_start, flat_high, bar_index, flat_low, htf_trend_up ? skin_buy_fill : skin_sell_fill, skin_edge_col, skin_border_w)
+else
+    if not na(flatBox)
+        box.delete(flatBox)
+        flatBox := na
+
+var line wl = na
+var label wll = na
+if not clean_mode and show_working_lvl and not na(working_level)
+    wl := f_line(wl, bar_index - 100, working_level, bar_index, working_level, skin_edge_col, skin_line_w)
+    wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, skin_text_col, skin_label_size)
+else
+    if not na(wl)
+        line.delete(wl)
+        wl := na
+    if not na(wll)
+        label.delete(wll)
+        wll := na
+
+var array<line> poc_lines = array.new_line()
+if not clean_mode and show_poc_lines and enable_poc
+    while array.size(poc_lines) < array.size(poc_prices)
+        array.push(poc_lines, na)
+    while array.size(poc_lines) > array.size(poc_prices)
+        line.delete(array.pop(poc_lines))
+    if array.size(poc_prices) > 0
+        for i = 0 to array.size(poc_prices) - 1
+            float lvl = array.get(poc_prices, i)
+            int tests = array.get(poc_tests, i)
+            color c = tests >= poc_dead_tests ? skin_dead_line : skin_poc_line
+            line ln = array.get(poc_lines, i)
+            ln := f_line(ln, array.get(poc_bars, i), lvl, bar_index, lvl, c, tests >= poc_dead_tests ? 1 : skin_line_w)
+            array.set(poc_lines, i, ln)
+else
+    while array.size(poc_lines) > 0
+        line.delete(array.pop(poc_lines))
+
+var line sl = na
+if not clean_mode and show_stop_line and position_active and not na(stop_price)
+    sl := f_line(sl, bar_index - 20, stop_price, bar_index, stop_price, open_dir == "BUY" ? skin_buy_fill : skin_sell_fill, skin_line_w)
+else
+    if not na(sl)
+        line.delete(sl)
+        sl := na
+
+var label trapUpLabel = na
+var label trapDownLabel = na
+var label chochLabel = na
+if not clean_mode and trap_up_icon
+    trapUpLabel := f_label(trapUpLabel, bar_index, low, "🪤", label.style_label_up, skin_trap_col, skin_text_col, skin_label_size)
+if not clean_mode and trap_down_icon
+    trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", label.style_label_down, skin_trap_col, skin_text_col, skin_label_size)
+if not clean_mode and choch_icon
+    chochLabel := f_label(chochLabel, bar_index, close, "CHOCH", label.style_label_left, skin_choch_col, skin_text_col, skin_label_size)
+
+var box rr_open_stop_box = na
+var box rr_open_take_box = na
+var box rr_open_take2_box = na
+var line rr_open_entry_line = na
+var label rr_open_stat_label = na
+if rr_draw_open and open_active and not clean_mode
+    int rr_right = bar_index + rr_open_extend
+    [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] := f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
+else
+    if not na(rr_open_stop_box)
+        box.delete(rr_open_stop_box)
+        rr_open_stop_box := na
+    if not na(rr_open_take_box)
+        box.delete(rr_open_take_box)
+        rr_open_take_box := na
+    if not na(rr_open_take2_box)
+        box.delete(rr_open_take2_box)
+        rr_open_take2_box := na
+    if not na(rr_open_entry_line)
+        line.delete(rr_open_entry_line)
+        rr_open_entry_line := na
+    if not na(rr_open_stat_label)
+        label.delete(rr_open_stat_label)
+        rr_open_stat_label := na
+
+var array<box> rr_hist_stop_boxes = array.new_box()
+var array<box> rr_hist_take_boxes = array.new_box()
+var array<box> rr_hist_take2_boxes = array.new_box()
+var array<line> rr_hist_entry_lines = array.new_line()
+var array<label> rr_hist_stat_labels = array.new_label()
+if show_rr_history and not clean_mode and barstate.islast
+    int n = array.size(log_dir)
+    while array.size(rr_hist_stop_boxes) < n
+        array.push(rr_hist_stop_boxes, na)
+        array.push(rr_hist_take_boxes, na)
+        array.push(rr_hist_take2_boxes, na)
+        array.push(rr_hist_entry_lines, na)
+        array.push(rr_hist_stat_labels, na)
+    while array.size(rr_hist_stop_boxes) > n
+        box.delete(array.pop(rr_hist_stop_boxes))
+        box.delete(array.pop(rr_hist_take_boxes))
+        box.delete(array.pop(rr_hist_take2_boxes))
+        line.delete(array.pop(rr_hist_entry_lines))
+        label.delete(array.pop(rr_hist_stat_labels))
+    if n > 0
+        for i = 0 to n - 1
+            int x1 = array.get(log_entryBar, i)
+            int x2 = array.get(log_exitBar, i)
+            string d = array.get(log_dir, i)
+            float en = array.get(log_entry, i)
+            float st = array.get(log_stopOrig, i)
+            float tm = array.get(log_takeMain, i)
+            float te = array.get(log_takeExt, i)
+            string rs = array.get(log_res, i)
+            box sb = array.get(rr_hist_stop_boxes, i)
+            box tb = array.get(rr_hist_take_boxes, i)
+            box t2 = array.get(rr_hist_take2_boxes, i)
+            line el = array.get(rr_hist_entry_lines, i)
+            label slb = array.get(rr_hist_stat_labels, i)
+            [sb, tb, t2, el, slb] := f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, sb, tb, t2, el, slb, rr_show_stat)
+            array.set(rr_hist_stop_boxes, i, sb)
+            array.set(rr_hist_take_boxes, i, tb)
+            array.set(rr_hist_take2_boxes, i, t2)
+            array.set(rr_hist_entry_lines, i, el)
+            array.set(rr_hist_stat_labels, i, slb)
+else if barstate.islast
+    while array.size(rr_hist_stop_boxes) > 0
+        box.delete(array.pop(rr_hist_stop_boxes))
+        box.delete(array.pop(rr_hist_take_boxes))
+        box.delete(array.pop(rr_hist_take2_boxes))
+        line.delete(array.pop(rr_hist_entry_lines))
+        label.delete(array.pop(rr_hist_stat_labels))
+
+// =========================
+// ALERTS
+// =========================
+alertcondition(buy_setup, "Prizrak BUY", "🟢 BUY {{ticker}} {{close}}")
+alertcondition(sell_setup, "Prizrak SELL", "🔴 SELL {{ticker}} {{close}}")
+alertcondition(trap_up or trap_down, "Prizrak TRAP", "🪤 TRAP {{ticker}} {{close}}")
+alertcondition(choch_true_evt, "Prizrak CHOCH TRUE", "🟣 CHOCH TRUE {{ticker}} {{close}}")
+alertcondition(position_active and not na(breakeven_price), "Prizrak BREAKEVEN", "⚖️ BE {{ticker}} {{close}}")
