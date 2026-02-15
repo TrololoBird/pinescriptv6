@@ -27,11 +27,11 @@ flat_len_4h        = input.int(80, "H4", minval=10, maxval=600, group=group_acc)
 max_flat_bars_man  = input.int(150, "Manual", minval=20, maxval=1000, group=group_acc)
 
 group_poc = "POC"
-poc_bins           = input.int(40, "POC bins", minval=10, maxval=200, group=group_poc)
+poc_bins           = input.int(30, "POC bins", minval=10, maxval=200, group=group_poc)
 max_poc_keep       = input.int(10, "Макс. POC", minval=1, maxval=50, group=group_poc)
 poc_dead_tests     = input.int(2, "Снять после N тестов", minval=1, maxval=10, group=group_poc)
 poc_test_tolerance = input.float(0.25, "Допуск теста (%)", step=0.05, minval=0.05, maxval=2, group=group_poc) / 100
-poc_price_mode     = input.string("CLOSE", "Цена профиля", options=["CLOSE", "HL2", "HLC3", "VWAP"], group=group_poc)
+poc_price_mode     = input.string("HLC3", "Цена профиля", options=["CLOSE", "HL2", "HLC3", "VWAP"], group=group_poc)
 bin_min_pct        = input.float(0.05, "Мин. размер бина (%)", step=0.01, minval=0.01, maxval=1.0, group=group_poc) / 100
 
 group_stop = "Стоповый объём"
@@ -61,7 +61,7 @@ macd_sig     = input.int(9, "MACD signal", minval=2, maxval=50, group=group_filt
 
 group_setups = "Сетапы"
 test_atr_frac      = input.float(0.30, "ATR proximity", step=0.05, minval=0.05, maxval=3, group=group_setups)
-allow_counter      = input.bool(true, "Разрешить контртренд", group=group_setups)
+allow_counter      = input.bool(false, "Разрешить контртренд", group=group_setups)
 rr_gate_enabled    = input.bool(true, "RR gate", group=group_setups)
 rr_min             = input.float(2.5, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
 rr_main_mult       = input.float(1.618, "Main TP mult", step=0.001, minval=0.1, maxval=10, group=group_setups)
@@ -70,7 +70,7 @@ rr_ext_mult        = input.float(2.618, "Ext TP mult", step=0.001, minval=0.1, m
 
 group_vis = "Визуализация"
 clean_mode       = input.bool(false, "Clean mode", group=group_vis)
-show_boxes       = input.bool(true, "Флэт-боксы", group=group_vis)
+show_boxes       = input.bool(false, "Флэт-боксы", group=group_vis)
 show_working_lvl = input.bool(true, "Рабочий уровень", group=group_vis)
 show_poc_lines   = input.bool(true, "Исторические POC", group=group_vis)
 show_stop_line   = input.bool(true, "Линия стопа", group=group_vis)
