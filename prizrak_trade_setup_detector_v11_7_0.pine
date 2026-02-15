@@ -54,6 +54,8 @@ choch_pivot_len  = input.int(10, "Pivot length", minval=2, maxval=50, group=grou
 choch_pivot_cap  = input.int(10, "Pivot cap", minval=2, maxval=200, group=group_choch)
 choch_break_early = input.float(0.5, "CHOCH EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
 choch_break_true  = input.float(1.0, "CHOCH TRUE (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
+choch_need_retest = input.bool(true, "CHOCH need retest", group=group_choch)
+choch_retest_bars = input.int(3, "CHOCH retest bars", minval=1, maxval=20, group=group_choch)
 
 group_filters = "Фильтры"
 rsi_len      = input.int(21, "RSI", minval=5, maxval=100, group=group_filters)
@@ -77,7 +79,7 @@ show_working_lvl = input.bool(true, "Рабочий уровень", group=group
 show_poc_lines   = input.bool(true, "Исторические POC", group=group_vis)
 show_stop_line   = input.bool(true, "Линия стопа", group=group_vis)
 show_squeeze     = input.bool(true, "Squeeze", group=group_vis)
-target_preset    = input.bool(false, "Target preset", group=group_vis)
+target_preset    = input.bool(true, "Target preset", group=group_vis)
 
 group_rr = "RR Overlay"
 show_rr_history = input.bool(true, "Show RR history", group=group_rr)
@@ -295,6 +297,9 @@ var string last_break_dir = ""
 
 var bool choch_active = false
 var int choch_kind = 0
+var int choch_pending_dir = 0
+var float choch_pending_level = na
+var int choch_pending_bar = na
 
 var bool position_active = false
 var string position_dir = ""
@@ -426,6 +431,10 @@ if in_stop
                 array.push(poc_prices, sv_poc)
                 array.push(poc_bars, bar_index)
                 array.push(poc_tests, 0)
+                if array.size(poc_prices) > max_poc_keep
+                    array.shift(poc_prices)
+                    array.shift(poc_bars)
+                    array.shift(poc_tests)
         in_stop := false
         stop_start := na
         stop_high := na
@@ -460,11 +469,56 @@ if htf_ready
     htf_trend_up := htf_last_ll > htf_prev_ll
     htf_trend_down := htf_last_hh < htf_prev_hh
 
+choch_active := false
+choch_kind := 0
 if enable_choch and htf_ready
-    bool choch_cross_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_early))
-    bool choch_cross_up = ta.crossover(close, htf_last_hh * (1 + choch_break_early))
-    choch_active := (htf_trend_up and choch_cross_dn) or (htf_trend_down and choch_cross_up)
-    choch_kind := htf_trend_up and choch_cross_dn ? 2 : htf_trend_down and choch_cross_up ? 4 : 0
+    bool choch_early_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_early))
+    bool choch_early_up = ta.crossover(close, htf_last_hh * (1 + choch_break_early))
+    bool choch_true_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_true))
+    bool choch_true_up = ta.crossover(close, htf_last_hh * (1 + choch_break_true))
+
+    bool early_evt = (htf_trend_up and choch_early_dn) or (htf_trend_down and choch_early_up)
+    int early_kind = htf_trend_up and choch_early_dn ? 1 : htf_trend_down and choch_early_up ? 3 : 0
+    int true_dir_now = htf_trend_up and choch_true_dn ? -1 : htf_trend_down and choch_true_up ? 1 : 0
+
+    if choch_need_retest
+        if true_dir_now != 0
+            choch_pending_dir := true_dir_now
+            choch_pending_level := true_dir_now == -1 ? htf_last_ll : htf_last_hh
+            choch_pending_bar := bar_index
+        bool pending_alive = choch_pending_dir != 0 and not na(choch_pending_bar) and (bar_index - choch_pending_bar) <= choch_retest_bars
+        if pending_alive
+            bool retest_hit = choch_pending_dir == -1 ? (high >= choch_pending_level and close < choch_pending_level) : (low <= choch_pending_level and close > choch_pending_level)
+            if retest_hit
+                choch_active := true
+                choch_kind := choch_pending_dir == -1 ? 2 : 4
+                choch_pending_dir := 0
+                choch_pending_level := na
+                choch_pending_bar := na
+            else if early_evt
+                choch_active := true
+                choch_kind := early_kind
+        else
+            choch_pending_dir := 0
+            choch_pending_level := na
+            choch_pending_bar := na
+            if early_evt
+                choch_active := true
+                choch_kind := early_kind
+    else
+        choch_pending_dir := 0
+        choch_pending_level := na
+        choch_pending_bar := na
+        if true_dir_now != 0
+            choch_active := true
+            choch_kind := true_dir_now == -1 ? 2 : 4
+        else if early_evt
+            choch_active := true
+            choch_kind := early_kind
+else
+    choch_pending_dir := 0
+    choch_pending_level := na
+    choch_pending_bar := na
 
 // =========================
 // WORKING LEVEL + TESTS + TRAPS
@@ -512,6 +566,9 @@ bool trap_up_icon = trap_up and (icon_cooldown == 0 or na(last_trap_up_icon_bar)
 bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_icon_bar) or (bar_index - last_trap_down_icon_bar >= icon_cooldown))
 bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
 bool choch_icon = choch_true_evt and (icon_cooldown == 0 or na(last_choch_icon_bar) or (bar_index - last_choch_icon_bar >= icon_cooldown))
+
+inner_buy = false
+inner_sell = false
 if trap_up_icon
     last_trap_up_icon_bar := bar_index
 if trap_down_icon
@@ -545,9 +602,15 @@ if rr_gate_enabled and (open_buy or open_sell)
     float risk_buy = math.abs(close - st_buy)
     float risk_sell = math.abs(close - st_sell)
     float tp_buy_main = close + risk_buy * rr_main_mult
+    float tp_buy_ext = close + risk_buy * rr_ext_mult
     float tp_sell_main = close - risk_sell * rr_main_mult
-    bool rr_ok_buy = risk_buy > 0 ? (math.abs(tp_buy_main - close) / risk_buy >= rr_min) : false
-    bool rr_ok_sell = risk_sell > 0 ? (math.abs(close - tp_sell_main) / risk_sell >= rr_min) : false
+    float tp_sell_ext = close - risk_sell * rr_ext_mult
+    float rr_buy_main = risk_buy > 0 ? math.abs(tp_buy_main - close) / risk_buy : na
+    float rr_buy_ext = risk_buy > 0 ? math.abs(tp_buy_ext - close) / risk_buy : na
+    float rr_sell_main = risk_sell > 0 ? math.abs(close - tp_sell_main) / risk_sell : na
+    float rr_sell_ext = risk_sell > 0 ? math.abs(close - tp_sell_ext) / risk_sell : na
+    bool rr_ok_buy = risk_buy > 0 ? math.max(rr_buy_main, rr_buy_ext) >= rr_min : false
+    bool rr_ok_sell = risk_sell > 0 ? math.max(rr_sell_main, rr_sell_ext) >= rr_min : false
     open_buy := open_buy and rr_ok_buy
     open_sell := open_sell and rr_ok_sell
 
@@ -765,8 +828,8 @@ else if barstate.islast
 // =========================
 // ALERTS
 // =========================
-alertcondition(buy_setup, "Prizrak BUY", "🟢 BUY {{ticker}} {{close}}")
-alertcondition(sell_setup, "Prizrak SELL", "🔴 SELL {{ticker}} {{close}}")
+alertcondition(buy_setup or inner_buy, "Prizrak BUY", "🟢 BUY {{ticker}} {{close}}")
+alertcondition(sell_setup or inner_sell, "Prizrak SELL", "🔴 SELL {{ticker}} {{close}}")
 alertcondition(trap_up or trap_down, "Prizrak TRAP", "🪤 TRAP {{ticker}} {{close}}")
-alertcondition(choch_true_evt, "Prizrak CHOCH TRUE", "🟣 CHOCH TRUE {{ticker}} {{close}}")
+alertcondition(choch_active and (choch_kind == 2 or choch_kind == 4), "Prizrak CHOCH TRUE", "🟣 CHOCH TRUE {{ticker}} {{close}}")
 alertcondition(position_active and not na(breakeven_price), "Prizrak BREAKEVEN", "⚖️ BE {{ticker}} {{close}}")
