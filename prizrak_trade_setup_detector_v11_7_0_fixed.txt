@@ -31,7 +31,7 @@ poc_bins           = input.int(30, "POC bins", minval=10, maxval=200, group=grou
 max_poc_keep       = input.int(10, "Макс. POC", minval=1, maxval=50, group=group_poc)
 poc_dead_tests     = input.int(2, "Снять после N тестов", minval=1, maxval=10, group=group_poc)
 poc_test_tolerance = input.float(0.25, "Допуск теста (%)", step=0.05, minval=0.05, maxval=2, group=group_poc) / 100
-poc_price_mode     = input.string("HLC3", "Цена профиля", options=["CLOSE", "HL2", "HLC3", "VWAP"], group=group_poc) // VWAP = anchored VWAP внутри текущего окна профиля
+poc_price_mode     = input.string("HLC3", "Цена профиля", options=["CLOSE", "HL2", "HLC3", "VWAP"], group=group_poc)
 bin_min_pct        = input.float(0.05, "Мин. размер бина (%)", step=0.01, minval=0.01, maxval=1.0, group=group_poc) / 100
 
 group_stop = "Стоповый объём"
@@ -63,7 +63,7 @@ group_setups = "Сетапы"
 test_atr_frac      = input.float(0.30, "ATR proximity", step=0.05, minval=0.05, maxval=3, group=group_setups)
 allow_counter      = input.bool(false, "Разрешить контртренд", group=group_setups)
 rr_gate_enabled    = input.bool(true, "RR gate", group=group_setups)
-rr_min             = input.float(1.5, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
+rr_min             = input.float(2.5, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
 rr_main_mult       = input.float(1.618, "Main TP mult", step=0.001, minval=0.1, maxval=10, group=group_setups)
 rr_ext_mult        = input.float(2.618, "Ext TP mult", step=0.001, minval=0.1, maxval=20, group=group_setups)
 
@@ -225,9 +225,6 @@ var float stop_price = na
 var float tp_main = na
 var float tp_ext = na
 var float breakeven_price = na
-var bool be_event = false
-
-be_event := false
 
 // =========================
 // ACCUMULATION
@@ -327,10 +324,6 @@ if in_stop
                 array.push(poc_prices, sv_poc)
                 array.push(poc_bars, bar_index)
                 array.push(poc_tests, 0)
-                if array.size(poc_prices) > max_poc_keep
-                    array.shift(poc_prices)
-                    array.shift(poc_bars)
-                    array.shift(poc_tests)
         in_stop := false
         stop_start := na
         stop_high := na
@@ -340,17 +333,16 @@ if in_stop
 // =========================
 // CHOCH
 // =========================
-const int HTF_PIVOT_CAP = 10
 [htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], lookahead=barmerge.lookahead_off)
 var array<float> htf_highs = array.new_float()
 var array<float> htf_lows = array.new_float()
 if not na(htf_ph)
     array.push(htf_highs, htf_ph)
-    if array.size(htf_highs) > HTF_PIVOT_CAP
+    if array.size(htf_highs) > 10
         array.shift(htf_highs)
 if not na(htf_pl)
     array.push(htf_lows, htf_pl)
-    if array.size(htf_lows) > HTF_PIVOT_CAP
+    if array.size(htf_lows) > 10
         array.shift(htf_lows)
 
 htf_ready = array.size(htf_highs) >= 2 and array.size(htf_lows) >= 2
@@ -367,21 +359,10 @@ if htf_ready
     htf_trend_down := htf_last_hh < htf_prev_hh
 
 if enable_choch and htf_ready
-    bool choch_cross_dn_early = ta.crossunder(close, htf_last_ll * (1 - choch_break_early))
-    bool choch_cross_dn_true = ta.crossunder(close, htf_last_ll * (1 - choch_break_true))
-    bool choch_cross_up_early = ta.crossover(close, htf_last_hh * (1 + choch_break_early))
-    bool choch_cross_up_true = ta.crossover(close, htf_last_hh * (1 + choch_break_true))
-
-    bool choch_dn_any = htf_trend_up and (choch_cross_dn_early or choch_cross_dn_true)
-    bool choch_up_any = htf_trend_down and (choch_cross_up_early or choch_cross_up_true)
-    choch_active := choch_dn_any or choch_up_any
-
-    if choch_dn_any
-        choch_kind := choch_cross_dn_true ? 2 : 1
-    else if choch_up_any
-        choch_kind := choch_cross_up_true ? 4 : 3
-    else
-        choch_kind := 0
+    bool choch_cross_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_early))
+    bool choch_cross_up = ta.crossover(close, htf_last_hh * (1 + choch_break_early))
+    choch_active := (htf_trend_up and choch_cross_dn) or (htf_trend_down and choch_cross_up)
+    choch_kind := htf_trend_up and choch_cross_dn ? 2 : htf_trend_down and choch_cross_up ? 4 : 0
 
 // =========================
 // WORKING LEVEL + TESTS + TRAPS
@@ -450,18 +431,8 @@ if rr_gate_enabled and (open_buy or open_sell)
     st_sell = not na(last_flat_high) and last_flat_valid ? last_flat_high : close + atr
     risk_buy = math.abs(close - st_buy)
     risk_sell = math.abs(close - st_sell)
-
-    float rr_buy = na
-    float rr_sell = na
-
-    if risk_buy > 0
-        float buy_target = not na(last_flat_high) and last_flat_valid and last_flat_high > close ? last_flat_high : close + risk_buy * rr_main_mult
-        rr_buy := math.abs(buy_target - close) / risk_buy
-
-    if risk_sell > 0
-        float sell_target = not na(last_flat_low) and last_flat_valid and last_flat_low < close ? last_flat_low : close - risk_sell * rr_main_mult
-        rr_sell := math.abs(close - sell_target) / risk_sell
-
+    rr_buy = risk_buy > 0 ? (risk_buy * rr_main_mult) / risk_buy : na
+    rr_sell = risk_sell > 0 ? (risk_sell * rr_main_mult) / risk_sell : na
     open_buy := open_buy and (not na(rr_buy) ? rr_buy >= rr_min : false)
     open_sell := open_sell and (not na(rr_sell) ? rr_sell >= rr_min : false)
 
@@ -482,7 +453,6 @@ if position_active
     if tp1_hit and na(breakeven_price)
         breakeven_price := entry_price
         stop_price := entry_price
-        be_event := true
 
     tp_main_hit = position_dir == "BUY" ? high >= tp_main : low <= tp_main
     tp_ext_hit = position_dir == "BUY" ? high >= tp_ext : low <= tp_ext
@@ -555,4 +525,4 @@ alertcondition(buy_setup, "Prizrak BUY", "🟢 BUY {{ticker}} {{close}}")
 alertcondition(sell_setup, "Prizrak SELL", "🔴 SELL {{ticker}} {{close}}")
 alertcondition(trap_up or trap_down, "Prizrak TRAP", "🪤 TRAP {{ticker}} {{close}}")
 alertcondition(choch_active and (choch_kind == 2 or choch_kind == 4), "Prizrak CHOCH TRUE", "🟣 CHOCH TRUE {{ticker}} {{close}}")
-alertcondition(be_event, "Prizrak BREAKEVEN", "⚖️ BE {{ticker}} {{close}}")
+alertcondition(position_active and not na(breakeven_price), "Prizrak BREAKEVEN", "⚖️ BE {{ticker}} {{close}}")
