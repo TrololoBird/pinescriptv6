@@ -112,6 +112,8 @@ skin_trap_col = color.new(color.orange, 0)
 skin_choch_col = color.new(color.fuchsia, 0)
 skin_squeeze_col = color.new(color.yellow, 70)
 skin_working_line_col = color.new(color.yellow, 0)
+skin_stop_line_col = color.new(skin_stop_fill, 0)
+skin_take_text_col = color.new(skin_take_fill, 0)
 skin_label_size = label_sz_eff
 skin_line_w = line_w_eff
 skin_border_w = border_w_eff
@@ -120,9 +122,9 @@ rr_cStop    = skin_stop_fill
 rr_cTake    = skin_take_fill
 rr_cTake2   = skin_take2_fill
 rr_cEdge    = skin_edge_col
-rr_cEntry   = color.new(color.yellow, 0)
-rr_cTagRisk = color.new(color.orange, 0)
-rr_cTagPnl  = color.new(color.green, 0)
+rr_cEntry   = skin_working_line_col
+rr_cTagRisk = skin_trap_col
+rr_cTagPnl  = skin_take_text_col
 
 // =========================
 // HELPERS
@@ -766,7 +768,7 @@ else
 
 var line sl = na
 if not clean_mode and show_stop_line and position_active and not na(stop_price)
-    sl := f_line(sl, bar_index - 20, stop_price, bar_index, stop_price, open_dir == "BUY" ? skin_buy_fill : skin_sell_fill, skin_line_w)
+    sl := f_line(sl, bar_index - 20, stop_price, bar_index, stop_price, skin_stop_line_col, skin_line_w)
 else
     if not na(sl)
         f_del_line(sl)
