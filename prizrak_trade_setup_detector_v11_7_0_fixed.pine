@@ -14,7 +14,7 @@ enable_filters  = input.bool(true, "RSI/MACD фильтры", group=group_main)
 
 group_acc = "Накопления"
 touch_tolerance    = input.float(0.15, "Допуск касания границ (%)", step=0.01, minval=0.05, maxval=0.5, group=group_acc) / 100
-min_touches        = input.int(4, "Мин. касаний", minval=2, maxval=10, group=group_acc)
+min_touches        = input.int(4, "Мин. касаний", minval=4, maxval=10, group=group_acc)
 min_touches_side   = input.int(2, "Мин. касаний на сторону", minval=1, maxval=10, group=group_acc)
 flat_max_range_pct = input.float(5.0, "Макс. диапазон флэта (%)", step=0.1, minval=0.5, maxval=30, group=group_acc) / 100
 flat_break_early   = input.float(0.5, "Лом структуры EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_acc) / 100
@@ -46,6 +46,7 @@ stop_range_atr_mult  = input.float(1.25, "Диапазон <= ATR *", step=0.05,
 group_traps = "Ловушки"
 trap_max_bars = input.int(8, "Окно ловушки", minval=2, maxval=50, group=group_traps)
 trap_vol_drop = input.float(0.75, "Падение объёма от MA *", step=0.05, minval=0.1, maxval=2.0, group=group_traps)
+trap_use_volume = input.bool(false, "Фильтр объёма для ловушек", group=group_traps)
 
 group_choch = "CHOCH"
 htf              = input.timeframe("240", "HTF", group=group_choch)
@@ -58,6 +59,7 @@ rsi_len      = input.int(21, "RSI", minval=5, maxval=100, group=group_filters)
 macd_fast    = input.int(19, "MACD fast", minval=2, maxval=50, group=group_filters)
 macd_slow    = input.int(39, "MACD slow", minval=5, maxval=100, group=group_filters)
 macd_sig     = input.int(9, "MACD signal", minval=2, maxval=50, group=group_filters)
+div_lookback = input.int(10, "Длина дивергенции", minval=2, maxval=100, group=group_filters)
 
 group_setups = "Сетапы"
 test_atr_frac      = input.float(0.30, "ATR proximity", step=0.05, minval=0.05, maxval=3, group=group_setups)
@@ -75,6 +77,11 @@ show_working_lvl = input.bool(true, "Рабочий уровень", group=group
 show_poc_lines   = input.bool(true, "Исторические POC", group=group_vis)
 show_stop_line   = input.bool(true, "Линия стопа", group=group_vis)
 show_squeeze     = input.bool(true, "Squeeze", group=group_vis)
+
+group_squeeze = "Squeeze"
+squeeze_bb_len = input.int(20, "BB length", minval=5, maxval=200, group=group_squeeze)
+squeeze_bb_mult = input.float(2.0, "BB multiplier", step=0.1, minval=0.1, maxval=10, group=group_squeeze)
+squeeze_factor = input.float(0.06, "BBW threshold", step=0.005, minval=0.001, maxval=1.0, group=group_squeeze)
 
 // =========================
 // HELPERS
@@ -141,35 +148,38 @@ calculatePOC(int start_bar, int end_bar, float lo, float hi) =>
         na
     else
         float bsz = f_bin_size(lo, hi)
-        int bins_actual = int(math.max(2, math.ceil((hi - lo) / bsz)))
-        array<float> vols = array.new_float(bins_actual, 0.0)
-        float cum_pv = 0.0
-        float cum_v = 0.0
-        for b = start_bar to end_bar
-            int off = bar_index - b
-            if off >= 0
-                float bv = volume[off]
-                if not na(bv) and bv > 0
-                    float bp = na
-                    if poc_price_mode == "VWAP"
-                        float tp = (high[off] + low[off] + close[off]) / 3.0
-                        cum_pv += tp * bv
-                        cum_v += bv
-                        bp := cum_v > 0 ? (cum_pv / cum_v) : tp
-                    else
-                        bp := f_bar_price(off)
-                    if not na(bp) and bp >= lo and bp <= hi
-                        int idx = int(math.floor((bp - lo) / bsz))
-                        idx := f_clamp_int(idx, 0, bins_actual - 1)
-                        array.set(vols, idx, array.get(vols, idx) + bv)
-        float maxv = 0.0
-        float poc = na
-        for i = 0 to bins_actual - 1
-            float v = array.get(vols, i)
-            if v > maxv
-                maxv := v
-                poc := lo + (i + 0.5) * bsz
-        poc
+        if na(bsz) or bsz <= 0
+            na
+        else
+            int bins_actual = int(math.max(2, math.ceil((hi - lo) / bsz)))
+            array<float> vols = array.new_float(bins_actual, 0.0)
+            float cum_pv = 0.0
+            float cum_v = 0.0
+            for b = start_bar to end_bar
+                int off = bar_index - b
+                if off >= 0 and off <= bar_index
+                    float bv = volume[off]
+                    if not na(bv) and bv > 0
+                        float bp = na
+                        if poc_price_mode == "VWAP"
+                            float tp = (high[off] + low[off] + close[off]) / 3.0
+                            cum_pv += tp * bv
+                            cum_v += bv
+                            bp := cum_v > 0 ? (cum_pv / cum_v) : tp
+                        else
+                            bp := f_bar_price(off)
+                        if not na(bp) and bp >= lo and bp <= hi
+                            int idx = int(math.floor((bp - lo) / bsz))
+                            idx := f_clamp_int(idx, 0, bins_actual - 1)
+                            array.set(vols, idx, array.get(vols, idx) + bv)
+            float maxv = 0.0
+            float poc = na
+            for i = 0 to bins_actual - 1
+                float v = array.get(vols, i)
+                if v > maxv
+                    maxv := v
+                    poc := lo + (i + 0.5) * bsz
+            poc
 
 // =========================
 // TECH DATA
@@ -184,7 +194,10 @@ vol_ma = ta.sma(volume, 50)
 rsi = ta.rsi(close, rsi_len)
 [macd_line, macd_signal, _] = ta.macd(close, macd_fast, macd_slow, macd_sig)
 
-squeeze = (high - low) >= atr * 2 and volume >= vol_ma * 1.5
+bb_basis = ta.sma(close, squeeze_bb_len)
+bb_dev = squeeze_bb_mult * ta.stdev(close, squeeze_bb_len)
+bbw = bb_basis != 0 and not na(bb_basis) and not na(bb_dev) ? (2.0 * bb_dev) / bb_basis : na
+squeeze = nz(bbw, 0) < squeeze_factor and barstate.isconfirmed
 barcolor(show_squeeze and not clean_mode and squeeze ? color.new(color.yellow, 70) : na)
 
 // =========================
@@ -268,7 +281,7 @@ if in_flat
 
     bool finalize = outside_early or outside_true or exit_confirm_cnt >= exit_confirm_bars or (bar_index - flat_start) > max_flat_bars
     if finalize
-        bool flat_valid = (touches_top + touches_bottom) >= min_touches
+        bool flat_valid = (touches_top + touches_bottom) >= min_touches and touches_top >= min_touches_side and touches_bottom >= min_touches_side
         if enable_poc and flat_valid
             float fpoc = calculatePOC(flat_start, math.max(flat_start, bar_index - 1), flat_low, flat_high)
             if not na(fpoc)
@@ -324,6 +337,10 @@ if in_stop
                 array.push(poc_prices, sv_poc)
                 array.push(poc_bars, bar_index)
                 array.push(poc_tests, 0)
+                if array.size(poc_prices) > max_poc_keep
+                    array.shift(poc_prices)
+                    array.shift(poc_bars)
+                    array.shift(poc_tests)
         in_stop := false
         stop_start := na
         stop_high := na
@@ -333,7 +350,7 @@ if in_stop
 // =========================
 // CHOCH
 // =========================
-[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], lookahead=barmerge.lookahead_off)
+[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=2000)
 var array<float> htf_highs = array.new_float()
 var array<float> htf_lows = array.new_float()
 if not na(htf_ph)
@@ -403,21 +420,31 @@ trap_up = false
 trap_down = false
 if not na(last_break_bar) and not na(working_level)
     in_window = (bar_index - last_break_bar) <= trap_max_bars
-    trap_up := last_break_dir == "up" and in_window and close < working_level and volume < vol_ma * trap_vol_drop
-    trap_down := last_break_dir == "down" and in_window and close > working_level and volume < vol_ma * trap_vol_drop
+    trap_vol_ok = not trap_use_volume or volume < vol_ma * trap_vol_drop
+    trap_up := last_break_dir == "up" and in_window and close < working_level and trap_vol_ok
+    trap_down := last_break_dir == "down" and in_window and close > working_level and trap_vol_ok
 
 // =========================
 // FILTERS + SETUPS
 // =========================
-hidden_bull  = rsi > rsi[1] and low < low[1]
-hidden_bear  = rsi < rsi[1] and high > high[1]
-classic_bull = rsi < rsi[1] and low < low[1]
-classic_bear = rsi > rsi[1] and high > high[1]
+price_hh = ta.highest(high, div_lookback)
+price_hh_prev = ta.highest(high[div_lookback], div_lookback)
+price_ll = ta.lowest(low, div_lookback)
+price_ll_prev = ta.lowest(low[div_lookback], div_lookback)
+rsi_hh = ta.highest(rsi, div_lookback)
+rsi_hh_prev = ta.highest(rsi[div_lookback], div_lookback)
+rsi_ll = ta.lowest(rsi, div_lookback)
+rsi_ll_prev = ta.lowest(rsi[div_lookback], div_lookback)
+
+classic_bear = price_hh > price_hh_prev and rsi_hh < rsi_hh_prev
+hidden_bear = price_hh < price_hh_prev and rsi_hh > rsi_hh_prev
+classic_bull = price_ll < price_ll_prev and rsi_ll > rsi_ll_prev
+hidden_bull = price_ll > price_ll_prev and rsi_ll < rsi_ll_prev
 macd_bull = macd_line > macd_signal
 macd_bear = macd_line < macd_signal
 
-bull_ok = not enable_filters or ((hidden_bull or classic_bull or macd_bull) and not hidden_bear and not classic_bear and not macd_bear)
-bear_ok = not enable_filters or ((hidden_bear or classic_bear or macd_bear) and not hidden_bull and not classic_bull and not macd_bull)
+bull_ok = not enable_filters or ((hidden_bull or classic_bull or macd_bull) and not (hidden_bear or classic_bear))
+bear_ok = not enable_filters or ((hidden_bear or classic_bear or macd_bear) and not (hidden_bull or classic_bull))
 
 float atr_ref = atr
 near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref * test_atr_frac : false
