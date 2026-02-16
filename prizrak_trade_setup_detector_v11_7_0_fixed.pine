@@ -9,7 +9,7 @@ enable_accum    = input.bool(true, "Накопления", group=group_main)
 enable_poc      = input.bool(true, "POC-уровни", group=group_main)
 enable_stop_vol = input.bool(true, "Стоповый объём", group=group_main)
 enable_traps    = input.bool(true, "Ловушки/проколы", group=group_main)
-enable_choch    = input.bool(true, "CHOCH", group=group_main)
+enable_choch    = input.bool(false, "CHOCH", group=group_main)
 enable_filters  = input.bool(true, "RSI/MACD фильтры", group=group_main)
 
 group_acc = "Накопления"
@@ -65,9 +65,14 @@ group_setups = "Сетапы"
 test_atr_frac      = input.float(0.30, "ATR proximity", step=0.05, minval=0.05, maxval=3, group=group_setups)
 allow_counter      = input.bool(false, "Разрешить контртренд", group=group_setups)
 rr_gate_enabled    = input.bool(true, "RR gate", group=group_setups)
-rr_min             = input.float(2.5, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
-rr_main_mult       = input.float(1.618, "Main TP mult", step=0.001, minval=0.1, maxval=10, group=group_setups)
-rr_ext_mult        = input.float(2.618, "Ext TP mult", step=0.001, minval=0.1, maxval=20, group=group_setups)
+rr_min             = input.float(3.0, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
+rr_main_mult       = input.float(3.0, "Main TP mult", step=0.001, minval=0.1, maxval=10, group=group_setups)
+rr_ext_mult        = input.float(4.5, "Ext TP mult", step=0.001, minval=0.1, maxval=20, group=group_setups)
+tp1_mult           = input.float(1.0, "TP1 mult", step=0.1, minval=0.2, maxval=10, group=group_setups)
+
+group_safety = "Stability"
+htf_calc_bars = input.int(2500, "HTF calc bars", minval=500, maxval=10000, group=group_safety)
+poc_safe_cap = input.int(100, "Hard cap for POC history", minval=20, maxval=200, group=group_safety)
 
 
 group_vis = "Визуализация"
@@ -151,7 +156,7 @@ calculatePOC(int start_bar, int end_bar, float lo, float hi) =>
         if na(bsz) or bsz <= 0
             na
         else
-            int bins_actual = int(math.max(2, math.ceil((hi - lo) / bsz)))
+            int bins_actual = f_clamp_int(int(math.max(2, math.ceil((hi - lo) / bsz))), 2, poc_bins)
             array<float> vols = array.new_float(bins_actual, 0.0)
             float cum_pv = 0.0
             float cum_v = 0.0
@@ -190,13 +195,13 @@ is_4h  = timeframe.isminutes and timeframe.multiplier == 240
 max_flat_bars = flat_len_auto ? (is_m15 ? flat_len_m15 : is_h1 ? flat_len_h1 : is_4h ? flat_len_4h : max_flat_bars_man) : max_flat_bars_man
 
 atr = ta.atr(14)
-vol_ma = ta.sma(volume, 50)
+vol_ma = nz(ta.sma(volume, 50), 0)
 rsi = ta.rsi(close, rsi_len)
 [macd_line, macd_signal, _] = ta.macd(close, macd_fast, macd_slow, macd_sig)
 
 bb_basis = ta.sma(close, squeeze_bb_len)
-bb_dev = squeeze_bb_mult * ta.stdev(close, squeeze_bb_len)
-bbw = bb_basis != 0 and not na(bb_basis) and not na(bb_dev) ? (2.0 * bb_dev) / bb_basis : na
+bb_dev = squeeze_bb_mult * nz(ta.stdev(close, squeeze_bb_len), 0)
+bbw = bb_basis != 0 and not na(bb_basis) ? (2.0 * bb_dev) / bb_basis : na
 squeeze = nz(bbw, 0) < squeeze_factor and barstate.isconfirmed
 barcolor(show_squeeze and not clean_mode and squeeze ? color.new(color.yellow, 70) : na)
 
@@ -350,7 +355,7 @@ if in_stop
 // =========================
 // CHOCH
 // =========================
-[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=2000)
+[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=htf_calc_bars)
 var array<float> htf_highs = array.new_float()
 var array<float> htf_lows = array.new_float()
 if not na(htf_ph)
@@ -394,6 +399,11 @@ if enable_poc and array.size(poc_prices) > 0
             touched = high >= loTol and low <= hiTol
             if touched
                 array.set(poc_tests, i, tests + 1)
+
+while array.size(poc_prices) > math.min(max_poc_keep, poc_safe_cap)
+    array.shift(poc_prices)
+    array.shift(poc_bars)
+    array.shift(poc_tests)
 
 float working_level = na
 if array.size(poc_prices) > 0
@@ -475,7 +485,7 @@ if not position_active and (open_buy or open_sell)
 
 if position_active
     risk = math.abs(entry_price - stop_price)
-    tp1 = position_dir == "BUY" ? entry_price + risk : entry_price - risk
+    tp1 = position_dir == "BUY" ? entry_price + risk * tp1_mult : entry_price - risk * tp1_mult
     tp1_hit = position_dir == "BUY" ? high >= tp1 : low <= tp1
     if tp1_hit and na(breakeven_price)
         breakeven_price := entry_price
