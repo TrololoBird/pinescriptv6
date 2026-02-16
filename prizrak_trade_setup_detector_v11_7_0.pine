@@ -168,6 +168,18 @@ f_label(label _lb, int _x, float _y, string _txt, label_style _style, color _bg,
         label.set_size(out, _sz)
     out
 
+f_del_box(box b) =>
+    if not na(b)
+        box.delete(b)
+
+f_del_line(line l) =>
+    if not na(l)
+        line.delete(l)
+
+f_del_label(label lb) =>
+    if not na(lb)
+        label.delete(lb)
+
 f_box_norm(box _bx, int _x1, float _a, int _x2, float _b, color _bg, color _bd, int _bw) =>
     float top = math.max(_a, _b)
     float bot = math.min(_a, _b)
@@ -193,7 +205,7 @@ f_rr_draw_one(int _x1, int _x2, string _dir, float _entry, float _stopOrig, floa
             take2BoxOut := f_box_norm(take2BoxOut, _x1, _takeMain, _x2, _takeExt, rr_cTake2, skin_edge_col, skin_border_w)
         else
             if not na(take2BoxOut)
-                box.delete(take2BoxOut)
+                f_del_box(take2BoxOut)
                 take2BoxOut := na
         entryLineOut := f_line(entryLineOut, _x1, _entry, _x2, _entry, rr_cEntry, skin_line_w)
         if _showStat
@@ -203,7 +215,7 @@ f_rr_draw_one(int _x1, int _x2, string _dir, float _entry, float _stopOrig, floa
             statLabelOut := f_label(statLabelOut, _x2, _entry, txt, label.style_label_left, tagColor, skin_text_col, skin_label_size)
         else
             if not na(statLabelOut)
-                label.delete(statLabelOut)
+                f_del_label(statLabelOut)
                 statLabelOut := na
     [stopBoxOut, takeBoxOut, take2BoxOut, entryLineOut, statLabelOut]
 
@@ -484,6 +496,7 @@ if htf_ready
 
 choch_active := false
 choch_kind := 0
+bool pending_alive = false
 if enable_choch and htf_ready
     bool choch_early_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_early))
     bool choch_early_up = ta.crossover(close, htf_last_hh * (1 + choch_break_early))
@@ -499,7 +512,7 @@ if enable_choch and htf_ready
             choch_pending_dir := true_dir_now
             choch_pending_level := true_dir_now == -1 ? htf_last_ll : htf_last_hh
             choch_pending_bar := bar_index
-        bool pending_alive = choch_pending_dir != 0 and not na(choch_pending_bar) and (bar_index - choch_pending_bar) <= choch_retest_bars
+        pending_alive := choch_pending_dir != 0 and not na(choch_pending_bar) and (bar_index - choch_pending_bar) <= choch_retest_bars
         if pending_alive
             bool retest_hit = choch_pending_dir == -1 ? (high >= choch_pending_level and close < choch_pending_level) : (low <= choch_pending_level and close > choch_pending_level)
             if retest_hit
@@ -582,6 +595,8 @@ bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_ico
 bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
 bool choch_icon = choch_true_evt and (icon_cooldown == 0 or na(last_choch_icon_bar) or (bar_index - last_choch_icon_bar >= icon_cooldown))
 
+bool choch_block = choch_active or (choch_need_retest and choch_pending_dir != 0 and pending_alive)
+
 inner_buy = false
 inner_sell = false
 if trap_up_icon
@@ -606,8 +621,8 @@ bear_ok = not enable_filters or ((hidden_bear or classic_bear or macd_bear) and 
 
 float atr_ref = atr
 near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref * test_atr_frac : false
-buy_setup = not choch_active and work_cross_up and (htf_trend_up or allow_counter) and bull_ok and near_level
-sell_setup = not choch_active and work_cross_dn and (htf_trend_down or allow_counter) and bear_ok and near_level
+buy_setup = not choch_block and work_cross_up and (htf_trend_up or allow_counter) and bull_ok and near_level
+sell_setup = not choch_block and work_cross_dn and (htf_trend_down or allow_counter) and bear_ok and near_level
 
 open_buy = buy_setup
 open_sell = sell_setup
@@ -715,7 +730,7 @@ if not clean_mode and show_boxes and in_flat and not na(flat_start) and not na(f
     flatBox := f_box(flatBox, flat_start, flat_high, bar_index, flat_low, htf_trend_up ? skin_buy_fill : skin_sell_fill, skin_edge_col, skin_border_w)
 else
     if not na(flatBox)
-        box.delete(flatBox)
+        f_del_box(flatBox)
         flatBox := na
 
 var line wl = na
@@ -725,10 +740,10 @@ if not clean_mode and show_working_lvl and not na(working_level)
     wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, skin_text_col, skin_label_size)
 else
     if not na(wl)
-        line.delete(wl)
+        f_del_line(wl)
         wl := na
     if not na(wll)
-        label.delete(wll)
+        f_del_label(wll)
         wll := na
 
 var array<line> poc_lines = array.new_line()
@@ -736,7 +751,7 @@ if not clean_mode and show_poc_lines and enable_poc
     while array.size(poc_lines) < array.size(poc_prices)
         array.push(poc_lines, na)
     while array.size(poc_lines) > array.size(poc_prices)
-        line.delete(array.pop(poc_lines))
+        f_del_line(array.pop(poc_lines))
     if array.size(poc_prices) > 0
         for i = 0 to array.size(poc_prices) - 1
             float lvl = array.get(poc_prices, i)
@@ -747,14 +762,14 @@ if not clean_mode and show_poc_lines and enable_poc
             array.set(poc_lines, i, ln)
 else
     while array.size(poc_lines) > 0
-        line.delete(array.pop(poc_lines))
+        f_del_line(array.pop(poc_lines))
 
 var line sl = na
 if not clean_mode and show_stop_line and position_active and not na(stop_price)
     sl := f_line(sl, bar_index - 20, stop_price, bar_index, stop_price, open_dir == "BUY" ? skin_buy_fill : skin_sell_fill, skin_line_w)
 else
     if not na(sl)
-        line.delete(sl)
+        f_del_line(sl)
         sl := na
 
 var label trapUpLabel = na
@@ -777,19 +792,19 @@ if rr_draw_open and open_active and not clean_mode
     [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] := f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
 else
     if not na(rr_open_stop_box)
-        box.delete(rr_open_stop_box)
+        f_del_box(rr_open_stop_box)
         rr_open_stop_box := na
     if not na(rr_open_take_box)
-        box.delete(rr_open_take_box)
+        f_del_box(rr_open_take_box)
         rr_open_take_box := na
     if not na(rr_open_take2_box)
-        box.delete(rr_open_take2_box)
+        f_del_box(rr_open_take2_box)
         rr_open_take2_box := na
     if not na(rr_open_entry_line)
-        line.delete(rr_open_entry_line)
+        f_del_line(rr_open_entry_line)
         rr_open_entry_line := na
     if not na(rr_open_stat_label)
-        label.delete(rr_open_stat_label)
+        f_del_label(rr_open_stat_label)
         rr_open_stat_label := na
 
 var array<box> rr_hist_stop_boxes = array.new_box()
@@ -806,11 +821,11 @@ if show_rr_history and not clean_mode and barstate.islast
         array.push(rr_hist_entry_lines, na)
         array.push(rr_hist_stat_labels, na)
     while array.size(rr_hist_stop_boxes) > n
-        box.delete(array.pop(rr_hist_stop_boxes))
-        box.delete(array.pop(rr_hist_take_boxes))
-        box.delete(array.pop(rr_hist_take2_boxes))
-        line.delete(array.pop(rr_hist_entry_lines))
-        label.delete(array.pop(rr_hist_stat_labels))
+        f_del_box(array.pop(rr_hist_stop_boxes))
+        f_del_box(array.pop(rr_hist_take_boxes))
+        f_del_box(array.pop(rr_hist_take2_boxes))
+        f_del_line(array.pop(rr_hist_entry_lines))
+        f_del_label(array.pop(rr_hist_stat_labels))
     if n > 0
         for i = 0 to n - 1
             int x1 = array.get(log_entryBar, i)
@@ -834,11 +849,11 @@ if show_rr_history and not clean_mode and barstate.islast
             array.set(rr_hist_stat_labels, i, slb)
 else if barstate.islast
     while array.size(rr_hist_stop_boxes) > 0
-        box.delete(array.pop(rr_hist_stop_boxes))
-        box.delete(array.pop(rr_hist_take_boxes))
-        box.delete(array.pop(rr_hist_take2_boxes))
-        line.delete(array.pop(rr_hist_entry_lines))
-        label.delete(array.pop(rr_hist_stat_labels))
+        f_del_box(array.pop(rr_hist_stop_boxes))
+        f_del_box(array.pop(rr_hist_take_boxes))
+        f_del_box(array.pop(rr_hist_take2_boxes))
+        f_del_line(array.pop(rr_hist_entry_lines))
+        f_del_label(array.pop(rr_hist_stat_labels))
 
 // =========================
 // ALERTS
