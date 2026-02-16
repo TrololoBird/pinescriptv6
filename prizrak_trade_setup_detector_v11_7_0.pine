@@ -110,6 +110,8 @@ skin_poc_line = color.new(color.yellow, 0)
 skin_dead_line = color.new(color.gray, 75)
 skin_trap_col = color.new(color.orange, 0)
 skin_choch_col = color.new(color.fuchsia, 0)
+skin_squeeze_col = color.new(color.yellow, 70)
+skin_working_line_col = color.new(color.yellow, 0)
 skin_label_size = label_sz_eff
 skin_line_w = line_w_eff
 skin_border_w = border_w_eff
@@ -226,35 +228,38 @@ calculatePOC(int start_bar, int end_bar, float lo, float hi) =>
         na
     else
         float bsz = f_bin_size(lo, hi)
-        int bins_actual = int(math.max(2, math.ceil((hi - lo) / bsz)))
-        array<float> vols = array.new_float(bins_actual, 0.0)
-        float cum_pv = 0.0
-        float cum_v = 0.0
-        for b = start_bar to end_bar
-            int off = bar_index - b
-            if off >= 0 and off <= bar_index
-                float bv = volume[off]
-                if not na(bv) and bv > 0
-                    float bp = na
-                    if poc_price_mode == "VWAP"
-                        float tp = (high[off] + low[off] + close[off]) / 3.0
-                        cum_pv += tp * bv
-                        cum_v += bv
-                        bp := cum_v > 0 ? (cum_pv / cum_v) : tp
-                    else
-                        bp := f_bar_price(off)
-                    if not na(bp) and bp >= lo and bp <= hi
-                        int idx = int(math.floor((bp - lo) / bsz))
-                        idx := f_clamp_int(idx, 0, bins_actual - 1)
-                        array.set(vols, idx, array.get(vols, idx) + bv)
-        float maxv = 0.0
-        float poc = na
-        for i = 0 to bins_actual - 1
-            float v = array.get(vols, i)
-            if v > maxv
-                maxv := v
-                poc := lo + (i + 0.5) * bsz
-        poc
+        if na(bsz) or bsz <= 0
+            na
+        else
+            int bins_actual = int(math.max(2, math.ceil((hi - lo) / bsz)))
+            array<float> vols = array.new_float(bins_actual, 0.0)
+            float cum_pv = 0.0
+            float cum_v = 0.0
+            for b = start_bar to end_bar
+                int off = bar_index - b
+                if off >= 0 and off <= bar_index
+                    float bv = volume[off]
+                    if not na(bv) and bv > 0
+                        float bp = na
+                        if poc_price_mode == "VWAP"
+                            float tp = (high[off] + low[off] + close[off]) / 3.0
+                            cum_pv += tp * bv
+                            cum_v += bv
+                            bp := cum_v > 0 ? (cum_pv / cum_v) : tp
+                        else
+                            bp := f_bar_price(off)
+                        if not na(bp) and bp >= lo and bp <= hi
+                            int idx = int(math.floor((bp - lo) / bsz))
+                            idx := f_clamp_int(idx, 0, bins_actual - 1)
+                            array.set(vols, idx, array.get(vols, idx) + bv)
+            float maxv = 0.0
+            float poc = na
+            for i = 0 to bins_actual - 1
+                float v = array.get(vols, i)
+                if v > maxv
+                    maxv := v
+                    poc := lo + (i + 0.5) * bsz
+            poc
 
 // =========================
 // TECH DATA
@@ -272,7 +277,7 @@ rsi = ta.rsi(close, rsi_len)
 bbw = ta.bbw(close, squeeze_bb_len, squeeze_bb_mult)
 bbw_ma = ta.sma(bbw, squeeze_bb_len)
 squeeze = not na(bbw_ma) and bbw <= bbw_ma * squeeze_factor
-barcolor(show_squeeze and not clean_mode and squeeze ? color.new(color.yellow, 70) : na)
+barcolor(show_squeeze and not clean_mode and squeeze ? skin_squeeze_col : na)
 
 // =========================
 // STATE
@@ -452,7 +457,7 @@ if in_stop
 // =========================
 // CHOCH
 // =========================
-[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off)
+[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=2000)
 var array<float> htf_highs = array.new_float()
 var array<float> htf_lows = array.new_float()
 if not na(htf_ph)
@@ -704,7 +709,7 @@ if position_active
 // =========================
 // VISUALS
 // =========================
-bool flat_valid_now = in_flat and (touches_top + touches_bottom >= min_touches)
+bool flat_valid_now = in_flat and (touches_top + touches_bottom >= math.max(min_touches, 4)) and touches_top >= min_touches_side and touches_bottom >= min_touches_side
 var box flatBox = na
 if not clean_mode and show_boxes and in_flat and not na(flat_start) and not na(flat_high) and not na(flat_low) and flat_valid_now
     flatBox := f_box(flatBox, flat_start, flat_high, bar_index, flat_low, htf_trend_up ? skin_buy_fill : skin_sell_fill, skin_edge_col, skin_border_w)
@@ -716,7 +721,7 @@ else
 var line wl = na
 var label wll = na
 if not clean_mode and show_working_lvl and not na(working_level)
-    wl := f_line(wl, bar_index - 100, working_level, bar_index, working_level, skin_edge_col, skin_line_w)
+    wl := f_line(wl, bar_index - 100, working_level, bar_index, working_level, skin_working_line_col, skin_line_w)
     wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, skin_text_col, skin_label_size)
 else
     if not na(wl)
