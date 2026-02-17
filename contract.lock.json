@@ -8,8 +8,8 @@
     ]
   },
   "inputs": {
-    "count": 69,
-    "sha256": "0a669a9334a1388971d8e6d0e0510cfa6b1783f2f49aaf1cd02d1e20cb9a3b12",
+    "count": 70,
+    "sha256": "c616d09c06a1618770ac7e8bcc8ffac9cbf4854c9becbda97536876ca56dcf4b",
     "lines": [
       "enable_accum    = input.bool(true, \"Накопления\", group=group_main)",
       "enable_poc      = input.bool(true, \"POC-уровни\", group=group_main)",
@@ -79,7 +79,8 @@
       "rr_draw_open    = input.bool(true, \"Draw open trade\", group=group_rr)",
       "rr_open_extend  = input.int(5, \"Open extend\", minval=0, maxval=200, group=group_rr)",
       "rr_hist_keep    = input.int(80, \"History keep\", minval=5, maxval=200, group=group_rr)",
-      "debug_mode = input.bool(false, \"Debug mode\", group=group_debug)"
+      "debug_mode = input.bool(false, \"Debug mode\", group=group_debug)",
+      "show_debug_table = input.bool(true, \"Show debug table\", group=group_debug)"
     ]
   },
   "alerts": {

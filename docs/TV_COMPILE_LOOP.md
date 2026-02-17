@@ -1,24 +1,58 @@
-# TradingView compile loop (DEV)
+# TradingView compile loop (DEV validation harness)
 
 ## Goal
-Validate that the Pine v6 script compiles and runs without runtime object-limit issues on a long history window.
+Run a reproducible compile/runtime loop for the Pine script and collect technical evidence for:
+- compile success,
+- object/runtime stability,
+- debug harness visibility across multiple timeframes.
 
-## Steps
-1. Open TradingView Pine Editor.
-2. Open `prizrak_trade_setup_detector_v11_7_0.pine` from this repo and copy all contents.
-3. Paste into a new Pine Editor tab.
-4. Save and click **Add to chart**.
-5. In the Pine Editor, confirm there are no compile errors.
-6. Scroll chart history to load approximately 5k bars.
-7. Confirm there are no runtime limit errors related to visual objects.
-8. Keep default settings and then toggle the PP module input on/off once to verify script stability.
+## Exact compile steps in TradingView
+1. Open TradingView in browser.
+2. Open **Pine Editor**.
+3. Open local file `prizrak_trade_setup_detector_v11_7_0.pine` in this repo and copy all content.
+4. Paste script into a new Pine Editor tab.
+5. Ensure Pine version is `//@version=6`.
+6. Click **Save**.
+7. Click **Add to chart**.
+8. Record compile result:
+   - if error: copy exact error text + line number,
+   - if success: capture screenshot with no compile error banner.
+9. Open settings and toggle:
+   - `Debug mode = true`,
+   - `Show debug table = true`.
+10. Confirm debug plots/table appear.
+11. Repeat visual check on exactly three chart timeframes:
+   - 15m,
+   - 1h,
+   - 4h.
 
-## What to return
-- One screenshot showing the script attached to chart with no compile error banner.
-- One screenshot showing no runtime error banner after history load.
-- If any error appears, return exact error text and line number.
+## What to capture
+- Compile stage:
+  - exact compile errors (if any), including line numbers.
+- Runtime stage:
+  - any `max_lines_count`, `max_labels_count`, `max_boxes_count`, or other runtime warnings.
+- Screenshots:
+  - 1 screenshot per timeframe (15m/1h/4h) with debug enabled,
+  - 1 screenshot with debug disabled (`Debug mode=false`) to verify debug visuals are suppressed.
 
-## Known-good checklist
-- Script compiles in Pine v6.
-- No runtime `max_*` object-limit errors on approximately 5k bars.
-- PP events can appear without compile/runtime failure.
+## 10-minute smoke checklist (technical only)
+- [ ] Script compiles in Pine v6 without errors.
+- [ ] No runtime object-limit warnings while scrolling history (~5k bars loaded).
+- [ ] No `na`-driven runtime failures when switching 15m -> 1h -> 4h.
+- [ ] Debug plots render when `Debug mode=true`.
+- [ ] Debug table renders only when `Debug mode=true` and `Show debug table=true`.
+- [ ] Debug table disappears when `Show debug table=false` or `Debug mode=false`.
+- [ ] With `Debug mode=false`, no extra debug plots/objects remain visible.
+- [ ] Existing alert conditions still compile.
+
+## Reporting template
+Use this structure when reporting results:
+1. Compile result: pass/fail + full error text if fail.
+2. Runtime result: pass/fail + full warning text if present.
+3. Timeframe evidence:
+   - 15m screenshot path
+   - 1h screenshot path
+   - 4h screenshot path
+4. Debug off screenshot path.
+5. Notes on any reproducible instability and exact reproduction steps.
+
