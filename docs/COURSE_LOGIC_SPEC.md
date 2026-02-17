@@ -76,6 +76,8 @@ Early break:
 
 Optional retest mode (`choch_need_retest`) introduces pending state (`choch_pending_*`) with validity window `choch_retest_bars`.
 
+After break or retest resolution, PP activation requires a fixed 2-bar close confirmation beyond the break threshold (`pp_confirm_bars = 2`, internal constant in DEV, no public input change).
+
 ### 1.6 RR overlay terms
 RR terms are presentation and accounting values for risk/reward visualization:
 - entry (`open_entry`), stop (`open_stopOrig`), main target (`open_takeMain`), extension target (`open_takeExt`)
