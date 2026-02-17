@@ -124,6 +124,7 @@ skin_stop_line_col = f_opaque(skin_stop_fill)
 skin_take_text_col = f_opaque(skin_take_fill)
 skin_label_size = label_sz_eff
 skin_line_w = line_w_eff
+skin_dead_line_w = 1
 skin_border_w = border_w_eff
 
 label_style trap_up_style = label.style_arrowup
@@ -226,10 +227,10 @@ f_rr_draw_one(int _x1, int _x2, string _dir, float _entry, float _stopOrig, floa
     line entryLineOut = _entryLine
     label statLabelOut = _statLabel
     if not na(_entry) and not na(_stopOrig) and not na(_takeMain)
-        stopBoxOut := f_box_norm(stopBoxOut, _x1, _entry, _x2, _stopOrig, rr_cStop, skin_edge_col, skin_border_w)
-        takeBoxOut := f_box_norm(takeBoxOut, _x1, _entry, _x2, _takeMain, rr_cTake, skin_edge_col, skin_border_w)
+        stopBoxOut := f_box_norm(stopBoxOut, _x1, _entry, _x2, _stopOrig, rr_cStop, rr_cEdge, skin_border_w)
+        takeBoxOut := f_box_norm(takeBoxOut, _x1, _entry, _x2, _takeMain, rr_cTake, rr_cEdge, skin_border_w)
         if not na(_takeExt)
-            take2BoxOut := f_box_norm(take2BoxOut, _x1, _takeMain, _x2, _takeExt, rr_cTake2, skin_edge_col, skin_border_w)
+            take2BoxOut := f_box_norm(take2BoxOut, _x1, _takeMain, _x2, _takeExt, rr_cTake2, rr_cEdge, skin_border_w)
         else
             if not na(take2BoxOut)
                 f_del_box(take2BoxOut)
@@ -780,7 +781,7 @@ if not clean_mode and show_poc_lines and enable_poc
             int tests = array.get(poc_tests, i)
             color c = tests >= poc_dead_tests ? skin_dead_line : skin_poc_line
             line ln = array.get(poc_lines, i)
-            ln := f_line_styled(ln, array.get(poc_bars, i), lvl, bar_index, lvl, c, tests >= poc_dead_tests ? 1 : skin_line_w, tests >= poc_dead_tests ? line.style_dashed : line.style_arrow_right)
+            ln := f_line_styled(ln, array.get(poc_bars, i), lvl, bar_index, lvl, c, tests >= poc_dead_tests ? skin_dead_line_w : skin_line_w, tests >= poc_dead_tests ? line.style_dashed : line.style_arrow_right)
             array.set(poc_lines, i, ln)
 else
     while array.size(poc_lines) > 0
