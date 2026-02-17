@@ -9,19 +9,22 @@ Run a reproducible compile/runtime loop for the Pine script and collect technica
 ## Exact compile steps in TradingView
 1. Open TradingView in browser.
 2. Open **Pine Editor**.
-3. Open local file `prizrak_trade_setup_detector_v11_7_0.pine` in this repo and copy all content.
-4. Paste script into a new Pine Editor tab.
-5. Ensure Pine version is `//@version=6`.
-6. Click **Save**.
-7. Click **Add to chart**.
-8. Record compile result:
+3. Export script from repo root:
+   - `make tv-export > /tmp/prizrak_tv_export.pine` (full), or
+   - `python tools/tv_export.py --strip-comments > /tmp/prizrak_tv_export_min.pine` (smaller payload).
+4. Open exported file and copy all content.
+5. Paste script into a new Pine Editor tab.
+6. Ensure Pine version is `//@version=6`.
+7. Click **Save**.
+8. Click **Add to chart**.
+9. Record compile result:
    - if error: copy exact error text + line number,
    - if success: capture screenshot with no compile error banner.
-9. Open settings and toggle:
+10. Open settings and toggle:
    - `Debug mode = true`,
    - `Show debug table = true`.
-10. Confirm debug plots/table appear.
-11. Repeat visual check on exactly three chart timeframes:
+11. Confirm debug plots/table appear.
+12. Repeat visual check on exactly three chart timeframes:
    - 15m,
    - 1h,
    - 4h.

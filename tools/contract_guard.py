@@ -6,6 +6,7 @@ import difflib
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List
@@ -101,6 +102,62 @@ def run_check(max_lines: int) -> int:
     return 0
 
 
+def _git_changed_files() -> List[str]:
+    proc = subprocess.run(
+        ["git", "diff", "--name-only", "--", "."],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return []
+    return [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+
+
+def run_dev_check(max_lines: int) -> int:
+    current = extract_contract(PINE_FILE)
+    if LOCK_FILE.exists():
+        expected = json.loads(LOCK_FILE.read_text(encoding="utf-8"))
+    else:
+        expected = {}
+
+    print("DEV contract report:")
+    changed_blocks: List[str] = []
+    for block in ("indicator", "inputs", "alerts"):
+        actual_block = current.get(block, {})
+        expected_block = expected.get(block, {})
+        if actual_block != expected_block:
+            changed_blocks.append(block)
+            print(f"- {block}: changed")
+            print(f"  lock   count={expected_block.get('count')} sha256={expected_block.get('sha256')}")
+            print(f"  actual count={actual_block.get('count')} sha256={actual_block.get('sha256')}")
+            print_block_diff(block, actual_block, expected_block, max_lines)
+        else:
+            print(
+                f"- {block}: unchanged (count={actual_block.get('count')} sha256={actual_block.get('sha256')})"
+            )
+
+    if not changed_blocks:
+        print("DEV contract report: no contract drift.")
+        return 0
+
+    changed_files = set(_git_changed_files())
+    docs_touched = (
+        "docs/COURSE_LOGIC_SPEC.md" in changed_files
+        or "docs/CHANGELOG_DEV.md" in changed_files
+    )
+
+    if docs_touched:
+        print("DEV guard OK: contract changed and docs updated (COURSE_LOGIC_SPEC.md or CHANGELOG_DEV.md).")
+        return 0
+
+    print("\nDEV guard FAILED: contract/interface changed, but no docs update found in git diff.")
+    print("Touch one of:")
+    print("- docs/COURSE_LOGIC_SPEC.md")
+    print("- docs/CHANGELOG_DEV.md")
+    return 1
+
+
 def run_init() -> int:
     contract = extract_contract(PINE_FILE)
     LOCK_FILE.write_text(json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -112,11 +169,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Guard Pine public contract (indicator/inputs/alerts).")
     parser.add_argument("--init", action="store_true", help="Rebuild contract lock from current Pine file")
     parser.add_argument("--check", action="store_true", help="Check current Pine file against lock (default)")
+    parser.add_argument("--dev-check", action="store_true", help="DEV mode: report contract changes and require docs updates")
     parser.add_argument("--max-diff-lines", type=int, default=20, help="Max diff lines per block")
     args = parser.parse_args()
 
     if args.init:
         return run_init()
+    if args.dev_check:
+        return run_dev_check(max_lines=args.max_diff_lines)
     return run_check(max_lines=args.max_diff_lines)
 
 
