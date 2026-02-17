@@ -14,6 +14,8 @@ SECTION_HEADER_RE = re.compile(r"^//\s*(={3,}|STATE\b|CORE\b|MODULES\b)")
 RAW_COLOR_RE = re.compile(
     r"\bcolor\.(red|green|blue|black|white|yellow|gray|grey|orange|purple|teal|fuchsia|aqua|lime|maroon|navy|olive|silver)\b"
 )
+DESTRUCT_ASSIGN_RE = re.compile(r"\]\s*:=")
+NAMED_ASSIGN_IN_CALL_RE = re.compile(r"\([^\n)]*\b[A-Za-z_]\w*\s*:=")
 
 
 def fail(msg: str) -> None:
@@ -79,6 +81,25 @@ def main() -> int:
         details = "; ".join([f"line {i}: {txt}" for i, txt in na_hits[:10]])
         fail(f"Forbidden comparison with na detected by regex {NA_COMPARE_RE.pattern}: {details}")
 
+    # 1b) tuple destructuring must use '=' in Pine v6
+    destruct_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if DESTRUCT_ASSIGN_RE.search(ln)]
+    if destruct_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in destruct_hits[:10]])
+        fail(
+            "Forbidden tuple destructuring assignment using ':=' detected; use '=' for tuple unpack. "
+            + details
+        )
+
+    # 1c) named-argument style assignment ':=' inside function calls is invalid in Pine
+    named_assign_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if NAMED_ASSIGN_IN_CALL_RE.search(ln)]
+    if named_assign_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in named_assign_hits[:10]])
+        fail(
+            "Forbidden ':=' assignment-like token inside function call arguments; "
+            "use '=' for named args or perform assignment before call. "
+            + details
+        )
+
     # 2) var self assignment
     var_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if VAR_SELF_ASSIGN_RE.search(ln)]
     if var_hits:
@@ -100,6 +121,25 @@ def main() -> int:
         if actual != expected:
             fail(f"Token count mismatch for '{token}': expected {expected}, got {actual}")
 
+    # 3b) constructors/deletes must stay in helpers only
+    helper_boundaries = {
+        "f_box": "box.new",
+        "f_line": "line.new",
+        "f_line_styled": "line.new",
+        "f_label": "label.new",
+        "f_del_box": "box.delete",
+        "f_del_line": "line.delete",
+        "f_del_label": "label.delete",
+    }
+    for fn_name, token in helper_boundaries.items():
+        fn_idx = next((i for i, ln in enumerate(lines, 1) if ln.strip().startswith(f"{fn_name}(")), None)
+        tok_idx = [i for i, ln in enumerate(lines, 1) if token in ln]
+        if fn_idx is None or not tok_idx:
+            fail(f"Could not locate helper '{fn_name}' or token '{token}' for helper-scope check")
+        for i in tok_idx:
+            if abs(i - fn_idx) > 25:
+                fail(f"Token '{token}' at line {i} appears outside expected helper scope near '{fn_name}'")
+
     # 4) request.security lookahead guard
     security_lines = [(i, ln) for i, ln in enumerate(lines, 1) if "request.security" in ln]
     if security_lines:
@@ -107,10 +147,11 @@ def main() -> int:
             (i, ln.strip())
             for i, ln in security_lines
             if "lookahead=barmerge.lookahead_off" not in ln.replace(" ", "")
+            or "gaps=barmerge.gaps_off" not in ln.replace(" ", "")
         ]
         if bad:
             details = "; ".join([f"line {i}: {txt}" for i, txt in bad[:10]])
-            fail("request.security must include lookahead=barmerge.lookahead_off. " + details)
+            fail("request.security must include lookahead=barmerge.lookahead_off and gaps=barmerge.gaps_off. " + details)
 
     # 5) raw colors only inside skin area
     skin_start = None
