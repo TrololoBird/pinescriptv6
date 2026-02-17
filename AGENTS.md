@@ -6,7 +6,8 @@
 
 ## Interface contract rules
 - Public interface is locked: `indicator(...)`, all `input.*` declarations (`name = input...`), and all `alertcondition(...)` lines.
-- Before commit, run `make check`.
+- DEV loop: run `make check-dev` while iterating on implementation/runtime stability.
+- PROD/pre-merge gate: run `make check` (contract + lint).
 - Contract checks:
   - `make contract-check` validates the Pine interface against `contract.lock.json`.
   - `make contract-init` refreshes lock file **only for intentional contract updates**.
