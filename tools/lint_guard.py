@@ -14,7 +14,10 @@ SECTION_HEADER_RE = re.compile(r"^//\s*(={3,}|STATE\b|CORE\b|MODULES\b)")
 RAW_COLOR_RE = re.compile(
     r"\bcolor\.(red|green|blue|black|white|yellow|gray|grey|orange|purple|teal|fuchsia|aqua|lime|maroon|navy|olive|silver)\b"
 )
-DESTRUCT_ASSIGN_RE = re.compile(r"\]\s*:=")
+FORBIDDEN_RR_OPEN_EQ_RE = re.compile(
+    r"^\s*\[\s*rr_open_stop_box\s*,\s*rr_open_take_box\s*,\s*rr_open_take2_box\s*,\s*rr_open_entry_line\s*,\s*rr_open_stat_label\s*\]\s*="
+)
+FORBIDDEN_RR_HIST_EQ_RE = re.compile(r"^\s*\[\s*sb\s*,\s*tb\s*,\s*t2\s*,\s*el\s*,\s*slb\s*\]\s*=")
 NAMED_ASSIGN_IN_CALL_RE = re.compile(r"\([^\n)]*\b[A-Za-z_]\w*\s*:=")
 
 
@@ -29,6 +32,13 @@ def _extract_input_int(lines: list[str], name: str) -> int | None:
         m = pat.match(ln)
         if m:
             return int(m.group(1))
+    return None
+
+
+def _line_index(lines: list[str], regex: re.Pattern[str]) -> int | None:
+    for i, ln in enumerate(lines, 1):
+        if regex.search(ln):
+            return i
     return None
 
 
@@ -81,12 +91,20 @@ def main() -> int:
         details = "; ".join([f"line {i}: {txt}" for i, txt in na_hits[:10]])
         fail(f"Forbidden comparison with na detected by regex {NA_COMPARE_RE.pattern}: {details}")
 
-    # 1b) tuple destructuring must use '=' in Pine v6
-    destruct_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if DESTRUCT_ASSIGN_RE.search(ln)]
-    if destruct_hits:
-        details = "; ".join([f"line {i}: {txt}" for i, txt in destruct_hits[:10]])
+    # 1b) known RR handle destructuring must not use '=' (causes shadow/redefine regressions)
+    rr_open_eq_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_RR_OPEN_EQ_RE.search(ln)]
+    if rr_open_eq_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in rr_open_eq_hits[:10]])
         fail(
-            "Forbidden tuple destructuring assignment using ':=' detected; use '=' for tuple unpack. "
+            "Forbidden destructuring with '=' for rr_open_* handles; use ':=' to reuse declared vars. "
+            + details
+        )
+
+    rr_hist_eq_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_RR_HIST_EQ_RE.search(ln)]
+    if rr_hist_eq_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in rr_hist_eq_hits[:10]])
+        fail(
+            "Forbidden destructuring with '=' for sb/tb/t2/el/slb handles; use ':=' to reuse declared vars. "
             + details
         )
 
@@ -99,6 +117,21 @@ def main() -> int:
             "use '=' for named args or perform assignment before call. "
             + details
         )
+
+    # 1d) cap declarations must appear before first use in helpers
+    poc_bins_decl = _line_index(lines, re.compile(r"^\s*int\s+poc_bins_cap\s*=\s*"))
+    poc_bins_use = _line_index(lines, re.compile(r"\bpoc_bins_cap\b"))
+    if poc_bins_decl is None:
+        fail("Missing declaration: int poc_bins_cap = ...")
+    if poc_bins_use is not None and poc_bins_use < poc_bins_decl:
+        fail("poc_bins_cap used before declaration. Move declarations above calculatePOC/f_bin_size.")
+
+    poc_window_decl = _line_index(lines, re.compile(r"^\s*int\s+poc_window_cap\s*=\s*"))
+    poc_window_use = _line_index(lines, re.compile(r"\bpoc_window_cap\b"))
+    if poc_window_decl is None:
+        fail("Missing declaration: int poc_window_cap = ...")
+    if poc_window_use is not None and poc_window_use < poc_window_decl:
+        fail("poc_window_cap used before declaration. Move declarations above calculatePOC/f_bin_size.")
 
     # 2) var self assignment
     var_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if VAR_SELF_ASSIGN_RE.search(ln)]
