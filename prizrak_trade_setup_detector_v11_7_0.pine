@@ -184,7 +184,7 @@ f_line(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w) =>
         line.set_width(out, _w)
     out
 
-f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, line_style _st) =>
+f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, _st) =>
     line out = _ln
     if na(out)
         out := line.new(_x1, _y1, _x2, _y2, color=_c, width=_w, style=_st)
@@ -196,7 +196,7 @@ f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w
         line.set_style(out, _st)
     out
 
-f_label(label _lb, int _x, float _y, string _txt, label_style _style, color _bg, color _tc, size _sz) =>
+f_label(label _lb, int _x, float _y, string _txt, _style, color _bg, color _tc, _sz) =>
     label out = _lb
     if na(out)
         out := label.new(_x, _y, _txt, style=_style, color=_bg, textcolor=_tc, size=_sz)
@@ -894,7 +894,7 @@ if not clean_mode and trap_up_icon
 if not clean_mode and trap_down_icon
     trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", target_preset ? trap_dn_style : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
 if not clean_mode and choch_icon
-    label_style choch_style = target_preset ? (choch_kind == 2 ? choch_up_style : choch_kind == 4 ? choch_dn_style : label.style_label_left) : label.style_label_left
+    choch_style = target_preset ? (choch_kind == 2 ? choch_up_style : choch_kind == 4 ? choch_dn_style : label.style_label_left) : label.style_label_left
     chochLabel := f_label(chochLabel, bar_index, close, "PP", choch_style, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
 
 var box rr_open_stop_box = na
