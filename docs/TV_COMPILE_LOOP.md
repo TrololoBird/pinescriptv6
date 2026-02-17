@@ -6,6 +6,9 @@ Run a reproducible compile/runtime loop for the Pine script and collect technica
 - object/runtime stability,
 - debug harness visibility across multiple timeframes.
 
+## PR readiness rule (mandatory)
+Any PR that changes logic is **NOT READY** until at least one full TradingView compile loop is completed and the result is recorded (pass or fail), with compile evidence attached.
+
 ## Exact compile steps in TradingView
 1. Open TradingView in browser.
 2. Open **Pine Editor**.
@@ -18,7 +21,7 @@ Run a reproducible compile/runtime loop for the Pine script and collect technica
 7. Click **Save**.
 8. Click **Add to chart**.
 9. Record compile result:
-   - if error: copy exact error text + line number,
+   - if error: copy exact error text + line/column,
    - if success: capture screenshot with no compile error banner.
 10. Open settings and toggle:
    - `Debug mode = true`,
@@ -31,7 +34,7 @@ Run a reproducible compile/runtime loop for the Pine script and collect technica
 
 ## What to capture
 - Compile stage:
-  - exact compile errors (if any), including line numbers.
+  - exact compile errors (if any), including line/column.
 - Runtime stage:
   - any `max_lines_count`, `max_labels_count`, `max_boxes_count`, or other runtime warnings.
 - Screenshots:
@@ -58,4 +61,3 @@ Use this structure when reporting results:
    - 4h screenshot path
 4. Debug off screenshot path.
 5. Notes on any reproducible instability and exact reproduction steps.
-

@@ -42,8 +42,10 @@ POC (Point of Control) is the price bin with maximum aggregated volume computed 
 ### 1.3 Stop-Volume event
 Stop-volume state (`in_stop`) is a low-range + elevated-volume consolidation event. Technical criteria include:
 - bounded range (`stop_max_range_pct` and ATR-normalized bound `stop_range_atr_mult`),
+- range density bound (`stop_density_mult`) to avoid wide/noisy windows,
 - volume condition relative to moving average (`stop_vol_mult`),
-- controlled exit logic with confirmation bars (`stop_exit_confirm`).
+- controlled exit logic with confirmation bars (`stop_exit_confirm`),
+- explicit policy for flat overlap: allowed only when `stop_detect_inside=true`.
 
 The event transitions through:
 1. detection/start,
@@ -58,6 +60,8 @@ Trap event is a failed continuation after a recent working-level break.
   - `trap_up`: prior up-break, then close back below level in window,
   - `trap_down`: prior down-break, then close back above level in window.
 - Optional volume filter: `volume < vol_ma * trap_vol_drop` when enabled.
+- Structural mismatch filter: trap break registration requires mismatch against current HTF priority
+  (`htf_trend_dir<=0` for up-break registration, `htf_trend_dir>=0` for down-break registration).
 
 ### 1.5 PP state (early/true)
 PP (trend-priority/state-shift logic; runtime currently uses legacy `choch_*` variable names with `pp_*` aliases for readability) has 4 state codes:
@@ -82,7 +86,7 @@ After break or retest resolution, PP activation requires a fixed 2-bar close con
 RR terms are presentation and accounting values for risk/reward visualization:
 - entry (`open_entry`), stop (`open_stopOrig`), main target (`open_takeMain`), extension target (`open_takeExt`)
 - multipliers: `rr_main_mult`, `rr_ext_mult`
-- gate pass/fail (`rr_gate_enabled`, `rr_min`, risk>0 checks)
+- gate pass/fail (`rr_gate_enabled`, `rr_min`, risk>0 checks). DEV default baseline: `rr_min=3.0`.
 - rendered objects: stop/take boxes, entry line, optional status labels, historical logs.
 
 ## 2) MTF rules
@@ -100,6 +104,8 @@ Trend priority uses latest two HTF highs and lows:
 - `htf_trend_up := htf_last_ll > htf_prev_ll`
 - `htf_trend_down := htf_last_hh < htf_prev_hh`
 
+This is equivalent to structure progression checks for higher lows / lower highs and remains deterministic under `lookahead_off`.
+
 `htf_ready` requires at least two highs and two lows in arrays.
 If not ready, both priorities are false.
 
@@ -111,18 +117,24 @@ If not ready, both priorities are false.
 ### 3.2 Flat finalize boolean
 `finalize = outside_early or outside_true or exit_confirm_cnt >= exit_confirm_bars or (bar_index - flat_start) > max_flat_bars`
 
+Boundary exit confirmation is close-based (`outside_any` via close beyond boundary), while hard invalidations use high/low against early/true margins.
+
 ### 3.3 Working level selection
 `working_level` is nearest active POC by absolute distance to `close`, excluding dead levels.
 
 ### 3.4 Break + trap detection
 Break:
-- up: `close > working_level and close[1] <= working_level and vol_break_ok`
-- down: `close < working_level and close[1] >= working_level and vol_break_ok`
+- up: `close > working_level and close[1] <= working_level and vol_break_ok and htf_align_up`
+- down: `close < working_level and close[1] >= working_level and vol_break_ok and htf_align_dn`
 
 Trap:
 - `in_window = (bar_index - last_break_bar) <= trap_max_bars`
 - `trap_up = last_break_dir == "up" and in_window and close < working_level and vol_trap_ok`
 - `trap_down = last_break_dir == "down" and in_window and close > working_level and vol_trap_ok`
+
+Where:
+- `htf_align_up = htf_trend_dir <= 0`
+- `htf_align_dn = htf_trend_dir >= 0`
 
 ### 3.5 PP state decision (legacy CHOCH runtime vars)
 - Compute `true_dir_now` from true break booleans.
@@ -138,6 +150,8 @@ Trap:
 When setup candidate exists (`open_buy` or `open_sell`), gate requires:
 - strictly positive risk (`risk_buy > 0` or `risk_sell > 0`)
 - multiplier policy `max(rr_main_mult, rr_ext_mult) >= rr_min`
+
+Default DEV floor: `rr_min = 3.0`.
 
 ## 4) Edge cases and runtime safety
 
@@ -172,6 +186,22 @@ When setup candidate exists (`open_buy` or `open_sell`), gate requires:
 - POC arrays are bounded by `max_poc_keep`; dead POCs tracked via test counters.
 - RR history is bounded by `rr_hist_keep`; old entries and corresponding visuals are pruned.
 
+DEV hardening safety margin:
+- runtime pruning uses internal 80% caps for long-history stability:
+  - `internal_poc_keep = floor(max_poc_keep * 0.8)`
+  - `internal_rr_keep = floor(rr_hist_keep * 0.8)`
+- POC workload caps:
+  - max bins per POC pass (`poc_bins_cap`)
+  - max sampled bars per pass via adaptive stepping (`poc_window_cap`)
+
+These caps are deterministic and only tighten runtime workload; they do not change interface semantics.
+
+## 7) Ambiguities / assumptions (from PDF phrasing)
+- PDF examples are partly discretionary and trading-oriented; this spec keeps only technical, reproducible conditions.
+- For trap logic, “ложный пробой/возврат” is encoded as level break + return within fixed bar window (`trap_max_bars`) with optional volume filter.
+- For PP, “подтверждение тестом” is implemented as retest-window + fixed 2-bar close confirmation to avoid realtime ambiguity.
+- For stop-volume “плотность/сжатие” wording, an explicit ATR-density bound (`stop_density_mult`) is assumed for deterministic implementation.
+
 ## 6) Validation harness (debug-only)
 
 ### 6.1 Toggle policy
@@ -199,4 +229,3 @@ When `debug_mode=false`, no debug plots/table are rendered.
 Optional with `show_debug_table=true`:
 - rows for latest scalar states (`flat_valid`, `pp_state`, `poc_level`, `trap_flags`, RR multipliers, etc.)
 - updated only on `barstate.islast`.
-
