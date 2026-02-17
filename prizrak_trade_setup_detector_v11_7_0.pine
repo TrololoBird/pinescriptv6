@@ -9,7 +9,7 @@ enable_accum    = input.bool(true, "Накопления", group=group_main)
 enable_poc      = input.bool(true, "POC-уровни", group=group_main)
 enable_stop_vol = input.bool(true, "Стоповый объём", group=group_main)
 enable_traps    = input.bool(true, "Ловушки/проколы", group=group_main)
-enable_choch    = input.bool(true, "CHOCH", group=group_main)
+enable_choch    = input.bool(true, "PP", group=group_main)
 enable_filters  = input.bool(true, "RSI/MACD фильтры", group=group_main)
 
 group_acc = "Накопления"
@@ -49,14 +49,21 @@ trap_vol_drop = input.float(0.75, "Падение объёма от MA *", step=
 trap_use_volume = input.bool(true, "Использовать фильтр объёма", group=group_traps)
 icon_cooldown = input.int(0, "Icon cooldown", minval=0, maxval=200, group=group_traps)
 
-group_choch = "CHOCH"
+group_choch = "PP"
 htf              = input.timeframe("240", "HTF", group=group_choch)
 choch_pivot_len  = input.int(10, "Pivot length", minval=2, maxval=50, group=group_choch)
 choch_pivot_cap  = input.int(10, "Pivot cap", minval=2, maxval=200, group=group_choch)
-choch_break_early = input.float(0.5, "CHOCH EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
-choch_break_true  = input.float(1.0, "CHOCH TRUE (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
-choch_need_retest = input.bool(true, "CHOCH need retest", group=group_choch)
-choch_retest_bars = input.int(3, "CHOCH retest bars", minval=1, maxval=20, group=group_choch)
+choch_break_early = input.float(0.5, "PP EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
+choch_break_true  = input.float(1.0, "PP TRUE (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
+choch_need_retest = input.bool(true, "PP need retest", group=group_choch)
+choch_retest_bars = input.int(3, "PP retest bars", minval=1, maxval=20, group=group_choch)
+
+// PP aliases over legacy choch_* runtime variables
+pp_enabled = enable_choch
+pp_break_early = choch_break_early
+pp_break_true = choch_break_true
+pp_need_retest = choch_need_retest
+pp_retest_bars = choch_retest_bars
 
 group_filters = "Фильтры"
 rsi_len      = input.int(21, "RSI", minval=5, maxval=100, group=group_filters)
@@ -416,7 +423,7 @@ if enable_accum and not in_flat and bar_index >= max_flat_bars
         cand_touch_bot += low[i] <= cand_low * (1 + touch_tolerance) ? 1 : 0
 
 int min_touch_req = math.max(min_touches, 4)
-bool htf_priority_flat_ok = not enable_choch or htf_trend_dir_cache != 0
+bool htf_priority_flat_ok = not pp_enabled or htf_trend_dir_cache != 0
 cand_ok = enable_accum and not in_flat and bar_index >= max_flat_bars and htf_priority_flat_ok and cand_rng_pct <= flat_max_range_pct and cand_touch_top + cand_touch_bot >= min_touch_req and cand_touch_top >= min_touches_side and cand_touch_bot >= min_touches_side
 if cand_ok
     in_flat := true
@@ -568,7 +575,7 @@ choch_active := false
 choch_kind := 0
 bool pending_alive = false
 bool confirm_alive = false
-if enable_choch and htf_ready
+if pp_enabled and htf_ready
     if new_htf_low and not na(htf_last_hh)
         pp_early_dn_level := array.get(htf_lows, array.size(htf_lows) - 1)
         pp_early_dn_ref_high := htf_last_hh
@@ -576,13 +583,13 @@ if enable_choch and htf_ready
         pp_early_up_level := array.get(htf_highs, array.size(htf_highs) - 1)
         pp_early_up_ref_low := htf_last_ll
 
-    float true_dn_level = not na(htf_last_ll) ? htf_last_ll * (1 - choch_break_true) : na
-    float true_up_level = not na(htf_last_hh) ? htf_last_hh * (1 + choch_break_true) : na
+    float true_dn_level = not na(htf_last_ll) ? htf_last_ll * (1 - pp_break_true) : na
+    float true_up_level = not na(htf_last_hh) ? htf_last_hh * (1 + pp_break_true) : na
     bool true_dn_break = not na(true_dn_level) and close < true_dn_level and close[1] >= true_dn_level
     bool true_up_break = not na(true_up_level) and close > true_up_level and close[1] <= true_up_level
 
-    float early_dn_level = not na(pp_early_dn_level) ? pp_early_dn_level * (1 - choch_break_early) : na
-    float early_up_level = not na(pp_early_up_level) ? pp_early_up_level * (1 + choch_break_early) : na
+    float early_dn_level = not na(pp_early_dn_level) ? pp_early_dn_level * (1 - pp_break_early) : na
+    float early_up_level = not na(pp_early_up_level) ? pp_early_up_level * (1 + pp_break_early) : na
     bool early_dn_break = not na(early_dn_level) and close < early_dn_level and close[1] >= early_dn_level
     bool early_up_break = not na(early_up_level) and close > early_up_level and close[1] <= early_up_level
     bool early_dn_guard = not na(pp_early_dn_ref_high) and htf_last_hh <= pp_early_dn_ref_high
@@ -593,7 +600,7 @@ if enable_choch and htf_ready
     float break_level = break_kind == 2 ? htf_last_ll : break_kind == 4 ? htf_last_hh : break_kind == 1 ? pp_early_dn_level : break_kind == 3 ? pp_early_up_level : na
 
     if break_kind != 0 and choch_pending_dir == 0 and choch_confirm_dir == 0
-        if choch_need_retest
+        if pp_need_retest
             choch_pending_dir := break_dir
             choch_pending_kind := break_kind
             choch_pending_level := break_level
@@ -605,7 +612,7 @@ if enable_choch and htf_ready
             choch_confirm_bar := bar_index
             choch_confirm_count := 0
 
-    pending_alive := choch_pending_dir != 0 and not na(choch_pending_bar) and (bar_index - choch_pending_bar) <= choch_retest_bars
+    pending_alive := choch_pending_dir != 0 and not na(choch_pending_bar) and (bar_index - choch_pending_bar) <= pp_retest_bars
     if pending_alive
         bool retest_hit = choch_pending_dir == -1 ? (high >= choch_pending_level and close < choch_pending_level) : (low <= choch_pending_level and close > choch_pending_level)
         if retest_hit
@@ -624,9 +631,9 @@ if enable_choch and htf_ready
         choch_pending_level := na
         choch_pending_bar := na
 
-    confirm_alive := choch_confirm_dir != 0 and not na(choch_confirm_bar) and (bar_index - choch_confirm_bar) <= choch_retest_bars
+    confirm_alive := choch_confirm_dir != 0 and not na(choch_confirm_bar) and (bar_index - choch_confirm_bar) <= pp_retest_bars
     if confirm_alive
-        float confirm_thr = choch_confirm_kind == 2 or choch_confirm_kind == 4 ? choch_break_true : choch_break_early
+        float confirm_thr = choch_confirm_kind == 2 or choch_confirm_kind == 4 ? pp_break_true : pp_break_early
         float confirm_level = choch_confirm_dir == -1 ? choch_confirm_level * (1 - confirm_thr) : choch_confirm_level * (1 + confirm_thr)
         bool confirm_bar_ok = choch_confirm_dir == -1 ? close < confirm_level : close > confirm_level
         choch_confirm_count := confirm_bar_ok ? choch_confirm_count + 1 : 0
@@ -704,7 +711,7 @@ bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_ico
 bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
 bool choch_icon = choch_true_evt and (icon_cooldown == 0 or na(last_choch_icon_bar) or (bar_index - last_choch_icon_bar >= icon_cooldown))
 
-bool choch_block = choch_active or (choch_need_retest and choch_pending_dir != 0 and pending_alive) or (choch_confirm_dir != 0 and confirm_alive)
+bool choch_block = choch_active or (pp_need_retest and choch_pending_dir != 0 and pending_alive) or (choch_confirm_dir != 0 and confirm_alive)
 
 inner_buy = false
 inner_sell = false
@@ -830,7 +837,7 @@ if position_active
 // =========================
 // VISUALS
 // =========================
-bool flat_valid_now = in_flat and (not enable_choch or htf_trend_dir_cache != 0) and (touches_top + touches_bottom >= math.max(min_touches, 4)) and touches_top >= min_touches_side and touches_bottom >= min_touches_side
+bool flat_valid_now = in_flat and (not pp_enabled or htf_trend_dir_cache != 0) and (touches_top + touches_bottom >= math.max(min_touches, 4)) and touches_top >= min_touches_side and touches_bottom >= min_touches_side
 var box flatBox = na
 if not clean_mode and show_boxes and in_flat and not na(flat_start) and not na(flat_high) and not na(flat_low) and flat_valid_now
     color flat_bg = htf_trend_dir == 1 ? skin_buy_fill : htf_trend_dir == -1 ? skin_sell_fill : skin_poc_fill
@@ -977,8 +984,8 @@ float debug_rr_main_mult = rr_main_mult
 float debug_rr_ext_mult = rr_ext_mult
 int debug_pp_pending = choch_pending_dir != 0 and pending_alive ? 1 : 0
 int debug_pp_confirm = choch_confirm_dir != 0 and confirm_alive ? 1 : 0
-int debug_pp_pending_left = debug_pp_pending == 1 and not na(choch_pending_bar) ? math.max(choch_retest_bars - (bar_index - choch_pending_bar), 0) : 0
-int debug_pp_confirm_left = debug_pp_confirm == 1 and not na(choch_confirm_bar) ? math.max(choch_retest_bars - (bar_index - choch_confirm_bar), 0) : 0
+int debug_pp_pending_left = debug_pp_pending == 1 and not na(choch_pending_bar) ? math.max(pp_retest_bars - (bar_index - choch_pending_bar), 0) : 0
+int debug_pp_confirm_left = debug_pp_confirm == 1 and not na(choch_confirm_bar) ? math.max(pp_retest_bars - (bar_index - choch_confirm_bar), 0) : 0
 float debug_last_pivot_high = htf_last_hh
 float debug_last_pivot_low = htf_last_ll
 int debug_htf_trend_dir = htf_trend_dir
@@ -1024,21 +1031,11 @@ else
         debug_table := na
 
 plot(debug_mode ? debug_flat_mid : na, "DBG Flat Mid", color=skin_working_line_col, linewidth=1, style=plot.style_line)
-plot(debug_mode ? debug_flat_valid_state : na, "DBG Flat Valid", color=skin_buy_fill, linewidth=2, style=plot.style_columns)
 plot(debug_mode ? debug_poc_level : na, "DBG POC Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
-plot(debug_mode ? working_level : na, "DBG Working Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
 plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
-plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flags", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
-plot(debug_mode ? (choch_active ? close : na) : na, "DBG PP Active", color=skin_choch_col, linewidth=2, style=plot.style_circles)
 plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_step)
-plot(debug_mode ? debug_pp_pending : na, "DBG PP Pending", color=skin_choch_col, linewidth=1, style=plot.style_columns)
-plot(debug_mode ? debug_pp_confirm : na, "DBG PP Confirm", color=skin_choch_col, linewidth=1, style=plot.style_columns)
-plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_step)
-plot(debug_mode ? debug_last_pivot_high : na, "DBG Last Pivot High", color=skin_take_fill, linewidth=1, style=plot.style_line)
-plot(debug_mode ? debug_last_pivot_low : na, "DBG Last Pivot Low", color=skin_stop_fill, linewidth=1, style=plot.style_line)
-plot(debug_mode ? (debug_rr_gate_state == 1 ? close : na) : na, "DBG RR Gate Passed", color=skin_take_fill, linewidth=2, style=plot.style_cross)
-plot(debug_mode ? debug_rr_main_mult : na, "DBG RR Main Mult", color=skin_take_fill, linewidth=1, style=plot.style_line)
-plot(debug_mode ? debug_rr_ext_mult : na, "DBG RR Ext Mult", color=skin_take2_fill, linewidth=1, style=plot.style_line)
+plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flags", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
+plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns)
 
 // =========================
 // ALERTS
@@ -1046,5 +1043,5 @@ plot(debug_mode ? debug_rr_ext_mult : na, "DBG RR Ext Mult", color=skin_take2_fi
 alertcondition(buy_setup or inner_buy, "Prizrak BUY", "🟢 BUY {{ticker}} {{close}}")
 alertcondition(sell_setup or inner_sell, "Prizrak SELL", "🔴 SELL {{ticker}} {{close}}")
 alertcondition(trap_up or trap_down, "Prizrak TRAP", "🪤 TRAP {{ticker}} {{close}}")
-alertcondition(choch_active and (choch_kind == 2 or choch_kind == 4), "Prizrak CHOCH TRUE", "🟣 CHOCH TRUE {{ticker}} {{close}}")
+alertcondition(choch_active and (choch_kind == 2 or choch_kind == 4), "Prizrak PP TRUE", "🟣 PP TRUE {{ticker}} {{close}}")
 alertcondition(position_active and not na(breakeven_price), "Prizrak BREAKEVEN", "⚖️ BE {{ticker}} {{close}}")

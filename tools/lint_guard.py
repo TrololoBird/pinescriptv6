@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -20,9 +21,55 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
+def _extract_input_int(lines: list[str], name: str) -> int | None:
+    pat = re.compile(rf"^\s*{re.escape(name)}\s*=\s*input\.int\(\s*([0-9]+)")
+    for ln in lines:
+        m = pat.match(ln)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _dev_object_budget_report(lines: list[str]) -> None:
+    max_lines = 500
+    max_labels = 500
+    max_boxes = 300
+
+    max_poc_keep = _extract_input_int(lines, "max_poc_keep") or 10
+    rr_hist_keep = _extract_input_int(lines, "rr_hist_keep") or 80
+
+    # Estimated concurrent objects in worst active state (heuristic, DEV-warning only):
+    # lines: poc_lines + wl + sl + rr_open_entry + rr_hist_entry
+    est_lines = max_poc_keep + 1 + 1 + 1 + rr_hist_keep
+    # boxes: flat + rr_open(3) + rr_hist(3 per log entry)
+    est_boxes = 1 + 3 + (3 * rr_hist_keep)
+    # labels: working level + trap up/down + pp + rr_open_stat + rr_hist_stat
+    est_labels = 1 + 1 + 1 + 1 + 1 + rr_hist_keep
+
+    safe_ratio = 0.7
+    warn = False
+    for kind, est, cap in (("lines", est_lines, max_lines), ("boxes", est_boxes, max_boxes), ("labels", est_labels, max_labels)):
+        ratio = est / cap
+        if ratio > safe_ratio:
+            warn = True
+            print(
+                f"WARN: DEV object budget high for {kind}: estimated={est}, cap={cap}, usage={ratio:.1%} (> {safe_ratio:.0%})"
+            )
+        else:
+            print(
+                f"INFO: DEV object budget {kind}: estimated={est}, cap={cap}, usage={ratio:.1%}"
+            )
+    if warn:
+        print("WARN: Consider reducing max_poc_keep/rr_hist_keep or visual object density for safer long-history runtime.")
+
+
 def main() -> int:
     if not PINE_FILE.exists():
         fail(f"Missing file: {PINE_FILE}")
+
+    parser = argparse.ArgumentParser(description="Pine lint guard")
+    parser.add_argument("--dev", action="store_true", help="Enable DEV-only warnings")
+    args = parser.parse_args()
 
     lines = PINE_FILE.read_text(encoding="utf-8").splitlines()
 
@@ -92,6 +139,9 @@ def main() -> int:
         fail(
             f"Raw color constants found outside skin area ({skin_start}-{skin_end - 1}): {details}"
         )
+
+    if args.dev:
+        _dev_object_budget_report(lines)
 
     print("Lint guard OK.")
     return 0

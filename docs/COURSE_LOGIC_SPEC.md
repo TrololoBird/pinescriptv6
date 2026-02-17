@@ -60,7 +60,7 @@ Trap event is a failed continuation after a recent working-level break.
 - Optional volume filter: `volume < vol_ma * trap_vol_drop` when enabled.
 
 ### 1.5 PP state (early/true)
-PP (trend-priority/state-shift logic; implemented with legacy `choch_*` variable names for compatibility) has 4 state codes:
+PP (trend-priority/state-shift logic; runtime currently uses legacy `choch_*` variable names with `pp_*` aliases for readability) has 4 state codes:
 - `1` = early down,
 - `2` = true down,
 - `3` = early up,
@@ -124,7 +124,7 @@ Trap:
 - `trap_up = last_break_dir == "up" and in_window and close < working_level and vol_trap_ok`
 - `trap_down = last_break_dir == "down" and in_window and close > working_level and vol_trap_ok`
 
-### 3.5 PP/CHOCH state decision
+### 3.5 PP state decision (legacy CHOCH runtime vars)
 - Compute `true_dir_now` from true break booleans.
 - Compute `early_evt` and `early_kind` from early break booleans and guards.
 - If retest enabled:
@@ -184,7 +184,7 @@ When `debug_mode=false`, no debug plots/table are rendered.
   - `DBG Flat Valid` (0/1)
 - PP:
   - `DBG PP State` (coded integer)
-  - `DBG CHOCH Active` event marker
+  - `DBG PP State` event/state marker
 - POC:
   - `DBG POC Level`
   - `DBG Working Level`

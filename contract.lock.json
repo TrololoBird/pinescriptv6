@@ -9,13 +9,13 @@
   },
   "inputs": {
     "count": 70,
-    "sha256": "c616d09c06a1618770ac7e8bcc8ffac9cbf4854c9becbda97536876ca56dcf4b",
+    "sha256": "d10ce6a28ef4b82f45ee035ef2444acf2e4b296ea2d0a0c4e9502983ea71b6c0",
     "lines": [
       "enable_accum    = input.bool(true, \"Накопления\", group=group_main)",
       "enable_poc      = input.bool(true, \"POC-уровни\", group=group_main)",
       "enable_stop_vol = input.bool(true, \"Стоповый объём\", group=group_main)",
       "enable_traps    = input.bool(true, \"Ловушки/проколы\", group=group_main)",
-      "enable_choch    = input.bool(true, \"CHOCH\", group=group_main)",
+      "enable_choch    = input.bool(true, \"PP\", group=group_main)",
       "enable_filters  = input.bool(true, \"RSI/MACD фильтры\", group=group_main)",
       "touch_tolerance    = input.float(0.15, \"Допуск касания границ (%)\", step=0.01, minval=0.05, maxval=0.5, group=group_acc) / 100",
       "min_touches        = input.int(4, \"Мин. касаний\", minval=4, maxval=10, group=group_acc)",
@@ -49,10 +49,10 @@
       "htf              = input.timeframe(\"240\", \"HTF\", group=group_choch)",
       "choch_pivot_len  = input.int(10, \"Pivot length\", minval=2, maxval=50, group=group_choch)",
       "choch_pivot_cap  = input.int(10, \"Pivot cap\", minval=2, maxval=200, group=group_choch)",
-      "choch_break_early = input.float(0.5, \"CHOCH EARLY (%)\", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100",
-      "choch_break_true  = input.float(1.0, \"CHOCH TRUE (%)\", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100",
-      "choch_need_retest = input.bool(true, \"CHOCH need retest\", group=group_choch)",
-      "choch_retest_bars = input.int(3, \"CHOCH retest bars\", minval=1, maxval=20, group=group_choch)",
+      "choch_break_early = input.float(0.5, \"PP EARLY (%)\", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100",
+      "choch_break_true  = input.float(1.0, \"PP TRUE (%)\", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100",
+      "choch_need_retest = input.bool(true, \"PP need retest\", group=group_choch)",
+      "choch_retest_bars = input.int(3, \"PP retest bars\", minval=1, maxval=20, group=group_choch)",
       "rsi_len      = input.int(21, \"RSI\", minval=5, maxval=100, group=group_filters)",
       "macd_fast    = input.int(19, \"MACD fast\", minval=2, maxval=50, group=group_filters)",
       "macd_slow    = input.int(39, \"MACD slow\", minval=5, maxval=100, group=group_filters)",
@@ -85,12 +85,12 @@
   },
   "alerts": {
     "count": 5,
-    "sha256": "00e811e1ebd9b50b1b120e7ec6e4bc8b1f63f67285a30256bc1ca04efc9dfa2b",
+    "sha256": "d5ad08d843e25f8f0d321df07b64ff562831a4a33ecf85617af538ae070701d9",
     "lines": [
       "alertcondition(buy_setup or inner_buy, \"Prizrak BUY\", \"🟢 BUY {{ticker}} {{close}}\")",
       "alertcondition(sell_setup or inner_sell, \"Prizrak SELL\", \"🔴 SELL {{ticker}} {{close}}\")",
       "alertcondition(trap_up or trap_down, \"Prizrak TRAP\", \"🪤 TRAP {{ticker}} {{close}}\")",
-      "alertcondition(choch_active and (choch_kind == 2 or choch_kind == 4), \"Prizrak CHOCH TRUE\", \"🟣 CHOCH TRUE {{ticker}} {{close}}\")",
+      "alertcondition(choch_active and (choch_kind == 2 or choch_kind == 4), \"Prizrak PP TRUE\", \"🟣 PP TRUE {{ticker}} {{close}}\")",
       "alertcondition(position_active and not na(breakeven_price), \"Prizrak BREAKEVEN\", \"⚖️ BE {{ticker}} {{close}}\")"
     ]
   }
