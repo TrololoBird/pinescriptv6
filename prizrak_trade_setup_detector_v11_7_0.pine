@@ -95,6 +95,7 @@ rr_hist_keep    = input.int(80, "History keep", minval=5, maxval=200, group=grou
 
 group_debug = "Debug"
 debug_mode = input.bool(false, "Debug mode", group=group_debug)
+show_debug_table = input.bool(true, "Show debug table", group=group_debug)
 
 f_opaque(color c) => color.rgb(color.r(c), color.g(c), color.b(c))
 f_with_alpha(color c, int a) => color.new(f_opaque(c), a)
@@ -355,8 +356,15 @@ var string last_break_dir = ""
 var bool choch_active = false
 var int choch_kind = 0
 var int choch_pending_dir = 0
+var int choch_pending_kind = 0
 var float choch_pending_level = na
 var int choch_pending_bar = na
+var int choch_confirm_dir = 0
+var int choch_confirm_kind = 0
+var float choch_confirm_level = na
+var int choch_confirm_bar = na
+var int choch_confirm_count = 0
+var int htf_trend_dir_cache = 0
 
 var bool position_active = false
 var string position_dir = ""
@@ -408,7 +416,8 @@ if enable_accum and not in_flat and bar_index >= max_flat_bars
         cand_touch_bot += low[i] <= cand_low * (1 + touch_tolerance) ? 1 : 0
 
 int min_touch_req = math.max(min_touches, 4)
-cand_ok = enable_accum and not in_flat and bar_index >= max_flat_bars and cand_rng_pct <= flat_max_range_pct and cand_touch_top + cand_touch_bot >= min_touch_req and cand_touch_top >= min_touches_side and cand_touch_bot >= min_touches_side
+bool htf_priority_flat_ok = not enable_choch or htf_trend_dir_cache != 0
+cand_ok = enable_accum and not in_flat and bar_index >= max_flat_bars and htf_priority_flat_ok and cand_rng_pct <= flat_max_range_pct and cand_touch_top + cand_touch_bot >= min_touch_req and cand_touch_top >= min_touches_side and cand_touch_bot >= min_touches_side
 if cand_ok
     in_flat := true
     flat_start := bar_index - max_flat_bars + 1
@@ -435,7 +444,7 @@ if in_flat
 
     bool finalize = outside_early or outside_true or exit_confirm_cnt >= exit_confirm_bars or (bar_index - flat_start) > max_flat_bars
     if finalize
-        bool flat_valid = (touches_top + touches_bottom) >= min_touch_req and touches_top >= min_touches_side and touches_bottom >= min_touches_side
+        bool flat_valid = htf_priority_flat_ok and (touches_top + touches_bottom) >= min_touch_req and touches_top >= min_touches_side and touches_bottom >= min_touches_side
         if enable_poc and flat_valid
             float fpoc = calculatePOC(flat_start, math.max(flat_start, bar_index - 1), flat_low, flat_high)
             if not na(fpoc)
@@ -523,6 +532,7 @@ var float pp_early_dn_level = na
 var float pp_early_dn_ref_high = na
 var float pp_early_up_level = na
 var float pp_early_up_ref_low = na
+int pp_confirm_bars = 2
 
 bool new_htf_high = not na(htf_ph) and (array.size(htf_highs) == 0 or htf_ph != array.get(htf_highs, array.size(htf_highs) - 1))
 bool new_htf_low = not na(htf_pl) and (array.size(htf_lows) == 0 or htf_pl != array.get(htf_lows, array.size(htf_lows) - 1))
@@ -541,79 +551,109 @@ if new_htf_low
         array.shift(htf_low_bars)
 
 htf_ready = array.size(htf_highs) >= 2 and array.size(htf_lows) >= 2
-htf_trend_up = false
-htf_trend_down = false
-htf_last_hh = na
-htf_last_ll = na
+float htf_last_hh = na
+float htf_last_ll = na
+int htf_trend_dir = 0
 if htf_ready
     htf_last_hh := array.get(htf_highs, array.size(htf_highs) - 1)
-    htf_prev_hh = array.get(htf_highs, array.size(htf_highs) - 2)
+    float htf_prev_hh = array.get(htf_highs, array.size(htf_highs) - 2)
     htf_last_ll := array.get(htf_lows, array.size(htf_lows) - 1)
-    htf_prev_ll = array.get(htf_lows, array.size(htf_lows) - 2)
-    htf_trend_up := htf_last_ll > htf_prev_ll
-    htf_trend_down := htf_last_hh < htf_prev_hh
+    float htf_prev_ll = array.get(htf_lows, array.size(htf_lows) - 2)
+    bool htf_trend_up = htf_last_ll > htf_prev_ll
+    bool htf_trend_down = htf_last_hh < htf_prev_hh
+    htf_trend_dir := htf_trend_up and not htf_trend_down ? 1 : htf_trend_down and not htf_trend_up ? -1 : 0
+htf_trend_dir_cache := htf_trend_dir
 
 choch_active := false
 choch_kind := 0
 bool pending_alive = false
+bool confirm_alive = false
 if enable_choch and htf_ready
     if new_htf_low and not na(htf_last_hh)
         pp_early_dn_level := array.get(htf_lows, array.size(htf_lows) - 1)
         pp_early_dn_ref_high := htf_last_hh
-
     if new_htf_high and not na(htf_last_ll)
         pp_early_up_level := array.get(htf_highs, array.size(htf_highs) - 1)
         pp_early_up_ref_low := htf_last_ll
 
-    bool true_dn_break = close < htf_last_ll * (1 - choch_break_true) and close[1] >= htf_last_ll * (1 - choch_break_true)
-    bool true_up_break = close > htf_last_hh * (1 + choch_break_true) and close[1] <= htf_last_hh * (1 + choch_break_true)
-    int true_dir_now = true_dn_break ? -1 : true_up_break ? 1 : 0
+    float true_dn_level = not na(htf_last_ll) ? htf_last_ll * (1 - choch_break_true) : na
+    float true_up_level = not na(htf_last_hh) ? htf_last_hh * (1 + choch_break_true) : na
+    bool true_dn_break = not na(true_dn_level) and close < true_dn_level and close[1] >= true_dn_level
+    bool true_up_break = not na(true_up_level) and close > true_up_level and close[1] <= true_up_level
 
-    bool early_dn_break = not na(pp_early_dn_level) and close < pp_early_dn_level * (1 - choch_break_early) and close[1] >= pp_early_dn_level * (1 - choch_break_early)
-    bool early_up_break = not na(pp_early_up_level) and close > pp_early_up_level * (1 + choch_break_early) and close[1] <= pp_early_up_level * (1 + choch_break_early)
+    float early_dn_level = not na(pp_early_dn_level) ? pp_early_dn_level * (1 - choch_break_early) : na
+    float early_up_level = not na(pp_early_up_level) ? pp_early_up_level * (1 + choch_break_early) : na
+    bool early_dn_break = not na(early_dn_level) and close < early_dn_level and close[1] >= early_dn_level
+    bool early_up_break = not na(early_up_level) and close > early_up_level and close[1] <= early_up_level
     bool early_dn_guard = not na(pp_early_dn_ref_high) and htf_last_hh <= pp_early_dn_ref_high
     bool early_up_guard = not na(pp_early_up_ref_low) and htf_last_ll >= pp_early_up_ref_low
-    bool early_evt = (early_dn_break and early_dn_guard) or (early_up_break and early_up_guard)
-    int early_kind = early_dn_break and early_dn_guard ? 1 : early_up_break and early_up_guard ? 3 : 0
 
-    if choch_need_retest
-        if true_dir_now != 0
-            choch_pending_dir := true_dir_now
-            choch_pending_level := true_dir_now == -1 ? htf_last_ll : htf_last_hh
+    int break_kind = true_dn_break ? 2 : true_up_break ? 4 : early_dn_break and early_dn_guard ? 1 : early_up_break and early_up_guard ? 3 : 0
+    int break_dir = break_kind == 1 or break_kind == 2 ? -1 : break_kind == 3 or break_kind == 4 ? 1 : 0
+    float break_level = break_kind == 2 ? htf_last_ll : break_kind == 4 ? htf_last_hh : break_kind == 1 ? pp_early_dn_level : break_kind == 3 ? pp_early_up_level : na
+
+    if break_kind != 0 and choch_pending_dir == 0 and choch_confirm_dir == 0
+        if choch_need_retest
+            choch_pending_dir := break_dir
+            choch_pending_kind := break_kind
+            choch_pending_level := break_level
             choch_pending_bar := bar_index
-        pending_alive := choch_pending_dir != 0 and not na(choch_pending_bar) and (bar_index - choch_pending_bar) <= choch_retest_bars
-        if pending_alive
-            bool retest_hit = choch_pending_dir == -1 ? (high >= choch_pending_level and close < choch_pending_level) : (low <= choch_pending_level and close > choch_pending_level)
-            if retest_hit
-                choch_active := true
-                choch_kind := choch_pending_dir == -1 ? 2 : 4
-                choch_pending_dir := 0
-                choch_pending_level := na
-                choch_pending_bar := na
-            else if early_evt
-                choch_active := true
-                choch_kind := early_kind
         else
+            choch_confirm_dir := break_dir
+            choch_confirm_kind := break_kind
+            choch_confirm_level := break_level
+            choch_confirm_bar := bar_index
+            choch_confirm_count := 0
+
+    pending_alive := choch_pending_dir != 0 and not na(choch_pending_bar) and (bar_index - choch_pending_bar) <= choch_retest_bars
+    if pending_alive
+        bool retest_hit = choch_pending_dir == -1 ? (high >= choch_pending_level and close < choch_pending_level) : (low <= choch_pending_level and close > choch_pending_level)
+        if retest_hit
+            choch_confirm_dir := choch_pending_dir
+            choch_confirm_kind := choch_pending_kind
+            choch_confirm_level := choch_pending_level
+            choch_confirm_bar := bar_index
+            choch_confirm_count := 0
             choch_pending_dir := 0
+            choch_pending_kind := 0
             choch_pending_level := na
             choch_pending_bar := na
-            if early_evt
-                choch_active := true
-                choch_kind := early_kind
     else
         choch_pending_dir := 0
+        choch_pending_kind := 0
         choch_pending_level := na
         choch_pending_bar := na
-        if true_dir_now != 0
+
+    confirm_alive := choch_confirm_dir != 0 and not na(choch_confirm_bar) and (bar_index - choch_confirm_bar) <= choch_retest_bars
+    if confirm_alive
+        float confirm_thr = choch_confirm_kind == 2 or choch_confirm_kind == 4 ? choch_break_true : choch_break_early
+        float confirm_level = choch_confirm_dir == -1 ? choch_confirm_level * (1 - confirm_thr) : choch_confirm_level * (1 + confirm_thr)
+        bool confirm_bar_ok = choch_confirm_dir == -1 ? close < confirm_level : close > confirm_level
+        choch_confirm_count := confirm_bar_ok ? choch_confirm_count + 1 : 0
+        if choch_confirm_count >= pp_confirm_bars
             choch_active := true
-            choch_kind := true_dir_now == -1 ? 2 : 4
-        else if early_evt
-            choch_active := true
-            choch_kind := early_kind
+            choch_kind := choch_confirm_kind
+            choch_confirm_dir := 0
+            choch_confirm_kind := 0
+            choch_confirm_level := na
+            choch_confirm_bar := na
+            choch_confirm_count := 0
+    else
+        choch_confirm_dir := 0
+        choch_confirm_kind := 0
+        choch_confirm_level := na
+        choch_confirm_bar := na
+        choch_confirm_count := 0
 else
     choch_pending_dir := 0
+    choch_pending_kind := 0
     choch_pending_level := na
     choch_pending_bar := na
+    choch_confirm_dir := 0
+    choch_confirm_kind := 0
+    choch_confirm_level := na
+    choch_confirm_bar := na
+    choch_confirm_count := 0
 
 // =========================
 // WORKING LEVEL + TESTS + TRAPS
@@ -664,7 +704,7 @@ bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_ico
 bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
 bool choch_icon = choch_true_evt and (icon_cooldown == 0 or na(last_choch_icon_bar) or (bar_index - last_choch_icon_bar >= icon_cooldown))
 
-bool choch_block = choch_active or (choch_need_retest and choch_pending_dir != 0 and pending_alive)
+bool choch_block = choch_active or (choch_need_retest and choch_pending_dir != 0 and pending_alive) or (choch_confirm_dir != 0 and confirm_alive)
 
 inner_buy = false
 inner_sell = false
@@ -690,8 +730,10 @@ bear_ok = not enable_filters or ((hidden_bear or classic_bear or macd_bear) and 
 
 float atr_ref = atr
 near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref * test_atr_frac : false
-buy_setup = not choch_block and work_cross_up and (htf_trend_up or allow_counter) and bull_ok and near_level
-sell_setup = not choch_block and work_cross_dn and (htf_trend_down or allow_counter) and bear_ok and near_level
+bool htf_buy_priority = htf_trend_dir == 1
+buy_setup = not choch_block and work_cross_up and (htf_buy_priority or allow_counter) and bull_ok and near_level
+bool htf_sell_priority = htf_trend_dir == -1
+sell_setup = not choch_block and work_cross_dn and (htf_sell_priority or allow_counter) and bear_ok and near_level
 
 open_buy = buy_setup
 open_sell = sell_setup
@@ -788,10 +830,11 @@ if position_active
 // =========================
 // VISUALS
 // =========================
-bool flat_valid_now = in_flat and (touches_top + touches_bottom >= math.max(min_touches, 4)) and touches_top >= min_touches_side and touches_bottom >= min_touches_side
+bool flat_valid_now = in_flat and (not enable_choch or htf_trend_dir_cache != 0) and (touches_top + touches_bottom >= math.max(min_touches, 4)) and touches_top >= min_touches_side and touches_bottom >= min_touches_side
 var box flatBox = na
 if not clean_mode and show_boxes and in_flat and not na(flat_start) and not na(flat_high) and not na(flat_low) and flat_valid_now
-    flatBox := f_box(flatBox, flat_start, flat_high, bar_index, flat_low, htf_trend_up ? skin_buy_fill : skin_sell_fill, skin_edge_col, skin_border_w)
+    color flat_bg = htf_trend_dir == 1 ? skin_buy_fill : htf_trend_dir == -1 ? skin_sell_fill : skin_poc_fill
+    flatBox := f_box(flatBox, flat_start, flat_high, bar_index, flat_low, flat_bg, skin_edge_col, skin_border_w)
 else
     if not na(flatBox)
         f_del_box(flatBox)
@@ -925,36 +968,77 @@ else if barstate.islast
 // DEBUG
 // =========================
 float debug_flat_mid = (in_flat and not na(flat_high) and not na(flat_low)) ? (flat_high + flat_low) / 2.0 : na
-int debug_choch_state = choch_active ? choch_kind : (choch_pending_dir != 0 and pending_alive ? choch_pending_dir : 0)
+int debug_pp_state = choch_active ? choch_kind : choch_confirm_dir != 0 and confirm_alive ? choch_confirm_kind : choch_pending_dir != 0 and pending_alive ? choch_pending_kind : 0
 int debug_rr_gate_state = (open_buy or open_sell) ? 1 : 0
+int debug_flat_valid_state = last_flat_valid ? 1 : 0
+float debug_poc_level = working_level
+int debug_trap_flags = trap_up ? 1 : trap_down ? -1 : 0
+float debug_rr_main_mult = rr_main_mult
+float debug_rr_ext_mult = rr_ext_mult
+int debug_pp_pending = choch_pending_dir != 0 and pending_alive ? 1 : 0
+int debug_pp_confirm = choch_confirm_dir != 0 and confirm_alive ? 1 : 0
+int debug_pp_pending_left = debug_pp_pending == 1 and not na(choch_pending_bar) ? math.max(choch_retest_bars - (bar_index - choch_pending_bar), 0) : 0
+int debug_pp_confirm_left = debug_pp_confirm == 1 and not na(choch_confirm_bar) ? math.max(choch_retest_bars - (bar_index - choch_confirm_bar), 0) : 0
+float debug_last_pivot_high = htf_last_hh
+float debug_last_pivot_low = htf_last_ll
+int debug_htf_trend_dir = htf_trend_dir
 
-if debug_mode and barstate.islast
+if debug_mode and show_debug_table and barstate.islast
     if na(debug_table)
-        debug_table := table.new(position.top_right, 2, 7, border_width=1)
+        debug_table := table.new(position.top_right, 2, 16, border_width=1)
     table.cell(debug_table, 0, 0, "flat_mid")
     table.cell(debug_table, 1, 0, str.tostring(debug_flat_mid, format.mintick))
-    table.cell(debug_table, 0, 1, "working_lvl")
-    table.cell(debug_table, 1, 1, str.tostring(working_level, format.mintick))
+    table.cell(debug_table, 0, 1, "flat_valid")
+    table.cell(debug_table, 1, 1, str.tostring(debug_flat_valid_state))
     table.cell(debug_table, 0, 2, "stop_price")
     table.cell(debug_table, 1, 2, str.tostring(stop_price, format.mintick))
-    table.cell(debug_table, 0, 3, "choch_state")
-    table.cell(debug_table, 1, 3, str.tostring(debug_choch_state))
-    table.cell(debug_table, 0, 4, "rr_gate")
-    table.cell(debug_table, 1, 4, str.tostring(debug_rr_gate_state))
-    table.cell(debug_table, 0, 5, "in_flat/in_stop")
-    table.cell(debug_table, 1, 5, str.tostring(in_flat ? 1 : 0) + "/" + str.tostring(in_stop ? 1 : 0))
-    table.cell(debug_table, 0, 6, "poc_count")
-    table.cell(debug_table, 1, 6, str.tostring(array.size(poc_prices)))
+    table.cell(debug_table, 0, 3, "pp_state")
+    table.cell(debug_table, 1, 3, str.tostring(debug_pp_state))
+    table.cell(debug_table, 0, 4, "pp_pending")
+    table.cell(debug_table, 1, 4, str.tostring(debug_pp_pending) + "(" + str.tostring(debug_pp_pending_left) + ")")
+    table.cell(debug_table, 0, 5, "pp_confirm")
+    table.cell(debug_table, 1, 5, str.tostring(debug_pp_confirm) + "(" + str.tostring(debug_pp_confirm_left) + ")")
+    table.cell(debug_table, 0, 6, "htf_trend_dir")
+    table.cell(debug_table, 1, 6, str.tostring(debug_htf_trend_dir))
+    table.cell(debug_table, 0, 7, "pivot_h/pivot_l")
+    table.cell(debug_table, 1, 7, str.tostring(debug_last_pivot_high, format.mintick) + "/" + str.tostring(debug_last_pivot_low, format.mintick))
+    table.cell(debug_table, 0, 8, "rr_gate")
+    table.cell(debug_table, 1, 8, str.tostring(debug_rr_gate_state))
+    table.cell(debug_table, 0, 9, "poc_level")
+    table.cell(debug_table, 1, 9, str.tostring(debug_poc_level, format.mintick))
+    table.cell(debug_table, 0, 10, "trap_flags")
+    table.cell(debug_table, 1, 10, str.tostring(debug_trap_flags))
+    table.cell(debug_table, 0, 11, "rr_main/rr_ext")
+    table.cell(debug_table, 1, 11, str.tostring(debug_rr_main_mult, "#.###") + "/" + str.tostring(debug_rr_ext_mult, "#.###"))
+    table.cell(debug_table, 0, 12, "in_flat/in_stop")
+    table.cell(debug_table, 1, 12, str.tostring(in_flat ? 1 : 0) + "/" + str.tostring(in_stop ? 1 : 0))
+    table.cell(debug_table, 0, 13, "poc_count")
+    table.cell(debug_table, 1, 13, str.tostring(array.size(poc_prices)))
+    table.cell(debug_table, 0, 14, "confirm_cnt")
+    table.cell(debug_table, 1, 14, str.tostring(choch_confirm_count))
+    table.cell(debug_table, 0, 15, "work_level")
+    table.cell(debug_table, 1, 15, str.tostring(working_level, format.mintick))
 else
     if not na(debug_table)
         table.delete(debug_table)
         debug_table := na
 
 plot(debug_mode ? debug_flat_mid : na, "DBG Flat Mid", color=skin_working_line_col, linewidth=1, style=plot.style_line)
+plot(debug_mode ? debug_flat_valid_state : na, "DBG Flat Valid", color=skin_buy_fill, linewidth=2, style=plot.style_columns)
+plot(debug_mode ? debug_poc_level : na, "DBG POC Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
 plot(debug_mode ? working_level : na, "DBG Working Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
 plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
-plot(debug_mode ? (choch_active ? close : na) : na, "DBG CHOCH Active", color=skin_choch_col, linewidth=2, style=plot.style_circles)
+plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flags", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
+plot(debug_mode ? (choch_active ? close : na) : na, "DBG PP Active", color=skin_choch_col, linewidth=2, style=plot.style_circles)
+plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_step)
+plot(debug_mode ? debug_pp_pending : na, "DBG PP Pending", color=skin_choch_col, linewidth=1, style=plot.style_columns)
+plot(debug_mode ? debug_pp_confirm : na, "DBG PP Confirm", color=skin_choch_col, linewidth=1, style=plot.style_columns)
+plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_step)
+plot(debug_mode ? debug_last_pivot_high : na, "DBG Last Pivot High", color=skin_take_fill, linewidth=1, style=plot.style_line)
+plot(debug_mode ? debug_last_pivot_low : na, "DBG Last Pivot Low", color=skin_stop_fill, linewidth=1, style=plot.style_line)
 plot(debug_mode ? (debug_rr_gate_state == 1 ? close : na) : na, "DBG RR Gate Passed", color=skin_take_fill, linewidth=2, style=plot.style_cross)
+plot(debug_mode ? debug_rr_main_mult : na, "DBG RR Main Mult", color=skin_take_fill, linewidth=1, style=plot.style_line)
+plot(debug_mode ? debug_rr_ext_mult : na, "DBG RR Ext Mult", color=skin_take2_fill, linewidth=1, style=plot.style_line)
 
 // =========================
 // ALERTS
