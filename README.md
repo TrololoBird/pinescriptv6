@@ -33,6 +33,8 @@ If you use AI-native editors like Cursor or Windsurf:
 - `make check-dev` — DEV loop (fast): runs lint/static guards that do not enforce interface lock.
 - `make check` — PROD gate: runs contract lock check + lint guards.
 - `make contract-init` — regenerate `contract.lock.json` only when an intentional interface change is required.
+- Error prevention workflow for Pine warnings/regressions: `docs/ERROR_PREVENTION_CHECKLIST.md`.
+- DEV history of fixes and checks: `docs/CHANGELOG_DEV.md`.
 
 ## 🧠 For LLMs: Usage Instructions
 
