@@ -1,5 +1,11 @@
 # DEV Changelog
 
+## 2026-02-18
+
+- Fixed RR draw tuple updates in `prizrak_trade_setup_detector_v11_7_0.pine` to use `:=` reassignment for existing objects (`rr_open_*`, `sb/tb/t2/el/slb`) instead of declaration-style `=`.
+- Removed Pine warnings about variable shadowing / duplicate definitions around RR open + RR history rendering blocks.
+- Verification sweep for this fix: `make check-dev`, `make check`, `make contract-check`, `make lint`.
+
 ## 2026-02-17
 
 - Guardrails split into DEV/RELEASE behavior:
