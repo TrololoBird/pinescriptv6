@@ -906,7 +906,7 @@ var line rr_open_entry_line = na
 var label rr_open_stat_label = na
 if rr_draw_open and open_active and not clean_mode
     int rr_right = bar_index + rr_open_extend
-    [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] = f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
+    [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] := f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
 else
     if not na(rr_open_stop_box)
         f_del_box(rr_open_stop_box)
@@ -958,7 +958,7 @@ if show_rr_history and not clean_mode and barstate.islast
             box t2 = array.get(rr_hist_take2_boxes, i)
             line el = array.get(rr_hist_entry_lines, i)
             label slb = array.get(rr_hist_stat_labels, i)
-            [sb, tb, t2, el, slb] = f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, sb, tb, t2, el, slb, rr_show_stat)
+            [sb, tb, t2, el, slb] := f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, sb, tb, t2, el, slb, rr_show_stat)
             array.set(rr_hist_stop_boxes, i, sb)
             array.set(rr_hist_take_boxes, i, tb)
             array.set(rr_hist_take2_boxes, i, t2)
@@ -1035,7 +1035,7 @@ else
 plot(debug_mode ? debug_flat_mid : na, "DBG Flat Mid", color=skin_working_line_col, linewidth=1, style=plot.style_line)
 plot(debug_mode ? debug_poc_level : na, "DBG POC Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
 plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
-plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_step)
+plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_stepline)
 plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flags", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
 plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns)
 
