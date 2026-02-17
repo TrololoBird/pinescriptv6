@@ -1,7 +1,10 @@
-.PHONY: check contract-check lint style-check contract-init
+.PHONY: check check-dev contract-check lint style-check contract-init
 
 check:
 	python tools/contract_guard.py --check && python tools/lint_guard.py
+
+check-dev:
+	python tools/lint_guard.py
 
 contract-check:
 	python tools/contract_guard.py --check

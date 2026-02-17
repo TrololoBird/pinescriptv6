@@ -30,7 +30,8 @@ If you use AI-native editors like Cursor or Windsurf:
 
 ## 🧪 Development checks
 
-- `make check` — run contract and lint guards locally before commit.
+- `make check-dev` — DEV loop (fast): runs lint/static guards that do not enforce interface lock.
+- `make check` — PROD gate: runs contract lock check + lint guards.
 - `make contract-init` — regenerate `contract.lock.json` only when an intentional interface change is required.
 
 ## 🧠 For LLMs: Usage Instructions

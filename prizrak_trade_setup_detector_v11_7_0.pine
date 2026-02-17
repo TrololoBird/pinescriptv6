@@ -93,6 +93,9 @@ rr_draw_open    = input.bool(true, "Draw open trade", group=group_rr)
 rr_open_extend  = input.int(5, "Open extend", minval=0, maxval=200, group=group_rr)
 rr_hist_keep    = input.int(80, "History keep", minval=5, maxval=200, group=group_rr)
 
+group_debug = "Debug"
+debug_mode = input.bool(false, "Debug mode", group=group_debug)
+
 f_opaque(color c) => color.rgb(color.r(c), color.g(c), color.b(c))
 f_with_alpha(color c, int a) => color.new(f_opaque(c), a)
 color skin_contrast_dark = color.black
@@ -387,6 +390,8 @@ var int last_trap_up_icon_bar = na
 var int last_trap_down_icon_bar = na
 var int last_choch_icon_bar = na
 
+var table debug_table = na
+
 // =========================
 // ACCUMULATION
 // =========================
@@ -441,6 +446,10 @@ if in_flat
                     array.shift(poc_prices)
                     array.shift(poc_bars)
                     array.shift(poc_tests)
+                while array.size(poc_prices) > math.max(max_poc_keep, 1)
+                    array.shift(poc_prices)
+                    array.shift(poc_bars)
+                    array.shift(poc_tests)
         last_flat_high := flat_high
         last_flat_low := flat_low
         last_flat_valid := flat_valid
@@ -490,6 +499,10 @@ if in_stop
                     array.shift(poc_prices)
                     array.shift(poc_bars)
                     array.shift(poc_tests)
+                while array.size(poc_prices) > math.max(max_poc_keep, 1)
+                    array.shift(poc_prices)
+                    array.shift(poc_bars)
+                    array.shift(poc_tests)
         in_stop := false
         stop_start := na
         stop_high := na
@@ -499,7 +512,9 @@ if in_stop
 // =========================
 // CHOCH
 // =========================
-[htf_ph, htf_pl] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=2000)
+[htf_ph_raw, htf_pl_raw] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=math.max(500, choch_pivot_cap * (choch_pivot_len * 2 + 10)))
+float htf_ph = na(htf_ph_raw) ? na : htf_ph_raw
+float htf_pl = na(htf_pl_raw) ? na : htf_pl_raw
 var array<float> htf_highs = array.new_float()
 var array<float> htf_lows = array.new_float()
 if not na(htf_ph)
@@ -880,6 +895,42 @@ else if barstate.islast
         f_del_box(array.pop(rr_hist_take2_boxes))
         f_del_line(array.pop(rr_hist_entry_lines))
         f_del_label(array.pop(rr_hist_stat_labels))
+
+
+// =========================
+// DEBUG
+// =========================
+float debug_flat_mid = (in_flat and not na(flat_high) and not na(flat_low)) ? (flat_high + flat_low) / 2.0 : na
+int debug_choch_state = choch_active ? choch_kind : (choch_pending_dir != 0 and pending_alive ? choch_pending_dir : 0)
+int debug_rr_gate_state = (open_buy or open_sell) ? 1 : 0
+
+if debug_mode and barstate.islast
+    if na(debug_table)
+        debug_table := table.new(position.top_right, 2, 7, border_width=1)
+    table.cell(debug_table, 0, 0, "flat_mid")
+    table.cell(debug_table, 1, 0, str.tostring(debug_flat_mid, format.mintick))
+    table.cell(debug_table, 0, 1, "working_lvl")
+    table.cell(debug_table, 1, 1, str.tostring(working_level, format.mintick))
+    table.cell(debug_table, 0, 2, "stop_price")
+    table.cell(debug_table, 1, 2, str.tostring(stop_price, format.mintick))
+    table.cell(debug_table, 0, 3, "choch_state")
+    table.cell(debug_table, 1, 3, str.tostring(debug_choch_state))
+    table.cell(debug_table, 0, 4, "rr_gate")
+    table.cell(debug_table, 1, 4, str.tostring(debug_rr_gate_state))
+    table.cell(debug_table, 0, 5, "in_flat/in_stop")
+    table.cell(debug_table, 1, 5, str.tostring(in_flat ? 1 : 0) + "/" + str.tostring(in_stop ? 1 : 0))
+    table.cell(debug_table, 0, 6, "poc_count")
+    table.cell(debug_table, 1, 6, str.tostring(array.size(poc_prices)))
+else
+    if not na(debug_table)
+        table.delete(debug_table)
+        debug_table := na
+
+plot(debug_mode ? debug_flat_mid : na, "DBG Flat Mid", color=skin_working_line_col, linewidth=1, style=plot.style_line)
+plot(debug_mode ? working_level : na, "DBG Working Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
+plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
+plot(debug_mode ? (choch_active ? close : na) : na, "DBG CHOCH Active", color=skin_choch_col, linewidth=2, style=plot.style_circles)
+plot(debug_mode ? (debug_rr_gate_state == 1 ? close : na) : na, "DBG RR Gate Passed", color=skin_take_fill, linewidth=2, style=plot.style_cross)
 
 // =========================
 // ALERTS
