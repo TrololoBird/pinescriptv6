@@ -109,7 +109,7 @@ f_with_alpha(color c, int a) => color.new(f_opaque(c), a)
 color skin_contrast_dark = color.black
 color skin_contrast_light = color.white
 f_contrast_text(color bg) =>
-    int lum = (299 * color.r(bg) + 587 * color.g(bg) + 114 * color.b(bg)) / 1000
+    float lum = (299 * color.r(bg) + 587 * color.g(bg) + 114 * color.b(bg)) / 1000
     lum > 140 ? skin_contrast_dark : skin_contrast_light
 
 zone_opacity_eff = target_preset ? 82 : 85
@@ -140,10 +140,10 @@ skin_line_w = line_w_eff
 skin_dead_line_w = 1
 skin_border_w = border_w_eff
 
-label_style trap_up_style = label.style_arrowup
-label_style trap_dn_style = label.style_arrowdown
-label_style choch_up_style = label.style_arrowup
-label_style choch_dn_style = label.style_arrowdown
+trap_up_style = label.style_arrowup
+trap_dn_style = label.style_arrowdown
+choch_up_style = label.style_arrowup
+choch_dn_style = label.style_arrowdown
 
 rr_cStop    = skin_stop_fill
 rr_cTake    = skin_take_fill
