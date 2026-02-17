@@ -95,9 +95,11 @@ rr_hist_keep    = input.int(80, "History keep", minval=5, maxval=200, group=grou
 
 f_opaque(color c) => color.rgb(color.r(c), color.g(c), color.b(c))
 f_with_alpha(color c, int a) => color.new(f_opaque(c), a)
+color skin_contrast_dark = color.black
+color skin_contrast_light = color.white
 f_contrast_text(color bg) =>
     int lum = (299 * color.r(bg) + 587 * color.g(bg) + 114 * color.b(bg)) / 1000
-    lum > 140 ? color.black : color.white
+    lum > 140 ? skin_contrast_dark : skin_contrast_light
 
 zone_opacity_eff = target_preset ? 82 : 85
 line_w_eff = target_preset ? 2 : 3
