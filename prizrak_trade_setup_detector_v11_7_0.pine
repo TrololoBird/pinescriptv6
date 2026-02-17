@@ -93,6 +93,12 @@ rr_draw_open    = input.bool(true, "Draw open trade", group=group_rr)
 rr_open_extend  = input.int(5, "Open extend", minval=0, maxval=200, group=group_rr)
 rr_hist_keep    = input.int(80, "History keep", minval=5, maxval=200, group=group_rr)
 
+f_opaque(color c) => color.rgb(color.r(c), color.g(c), color.b(c))
+f_with_alpha(color c, int a) => color.new(f_opaque(c), a)
+f_contrast_text(color bg) =>
+    int lum = (299 * color.r(bg) + 587 * color.g(bg) + 114 * color.b(bg)) / 1000
+    lum > 140 ? color.black : color.white
+
 zone_opacity_eff = target_preset ? 82 : 85
 line_w_eff = target_preset ? 2 : 3
 border_w_eff = target_preset ? 2 : 1
@@ -104,19 +110,26 @@ skin_stop_fill = color.new(color.red, target_preset ? 82 : 85)
 skin_take_fill = color.new(color.green, target_preset ? 82 : 85)
 skin_take2_fill = color.new(color.teal, target_preset ? 84 : 87)
 skin_poc_fill = color.new(color.blue, target_preset ? 87 : 90)
-skin_edge_col = color.new(color.black, 0)
-skin_text_col = color.new(color.white, 0)
+color skin_edge_base = target_preset ? chart.fg_color : color.black
+color skin_text_base = target_preset ? chart.fg_color : color.white
+skin_edge_col = color.new(skin_edge_base, 0)
+skin_text_col = color.new(skin_text_base, 0)
 skin_poc_line = color.new(color.yellow, 0)
 skin_dead_line = color.new(color.gray, 75)
 skin_trap_col = color.new(color.orange, 0)
 skin_choch_col = color.new(color.fuchsia, 0)
 skin_squeeze_col = color.new(color.yellow, 70)
 skin_working_line_col = color.new(color.yellow, 0)
-skin_stop_line_col = color.new(skin_stop_fill, 0)
-skin_take_text_col = color.new(skin_take_fill, 0)
+skin_stop_line_col = f_opaque(skin_stop_fill)
+skin_take_text_col = f_opaque(skin_take_fill)
 skin_label_size = label_sz_eff
 skin_line_w = line_w_eff
 skin_border_w = border_w_eff
+
+label_style trap_up_style = label.style_arrowup
+label_style trap_dn_style = label.style_arrowdown
+label_style choch_up_style = label.style_arrowup
+label_style choch_dn_style = label.style_arrowdown
 
 rr_cStop    = skin_stop_fill
 rr_cTake    = skin_take_fill
@@ -155,6 +168,18 @@ f_line(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w) =>
         line.set_xy2(out, _x2, _y2)
         line.set_color(out, _c)
         line.set_width(out, _w)
+    out
+
+f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, line_style _st) =>
+    line out = _ln
+    if na(out)
+        out := line.new(_x1, _y1, _x2, _y2, color=_c, width=_w, style=_st)
+    else
+        line.set_xy1(out, _x1, _y1)
+        line.set_xy2(out, _x2, _y2)
+        line.set_color(out, _c)
+        line.set_width(out, _w)
+        line.set_style(out, _st)
     out
 
 f_label(label _lb, int _x, float _y, string _txt, label_style _style, color _bg, color _tc, size _sz) =>
@@ -209,12 +234,12 @@ f_rr_draw_one(int _x1, int _x2, string _dir, float _entry, float _stopOrig, floa
             if not na(take2BoxOut)
                 f_del_box(take2BoxOut)
                 take2BoxOut := na
-        entryLineOut := f_line(entryLineOut, _x1, _entry, _x2, _entry, rr_cEntry, skin_line_w)
+        entryLineOut := f_line_styled(entryLineOut, _x1, _entry, _x2, _entry, rr_cEntry, skin_line_w, line.style_arrow_right)
         if _showStat
             float rrv = f_rr_pct(_entry, _takeMain, _stopOrig)
             string txt = f_rr_res_text(_dir, _res) + (not na(rrv) ? " | RR " + str.tostring(rrv, "#.##") : "")
             color tagColor = str.contains(_res, "SL") ? rr_cTagRisk : rr_cTagPnl
-            statLabelOut := f_label(statLabelOut, _x2, _entry, txt, label.style_label_left, tagColor, skin_text_col, skin_label_size)
+            statLabelOut := f_label(statLabelOut, _x2, _entry, txt, label.style_label_left, tagColor, f_contrast_text(tagColor), skin_label_size)
         else
             if not na(statLabelOut)
                 f_del_label(statLabelOut)
@@ -633,16 +658,11 @@ if rr_gate_enabled and (open_buy or open_sell)
     float st_sell = not na(last_flat_high) and last_flat_valid ? last_flat_high : close + atr
     float risk_buy = math.abs(close - st_buy)
     float risk_sell = math.abs(close - st_sell)
-    float tp_buy_main = close + risk_buy * rr_main_mult
-    float tp_buy_ext = close + risk_buy * rr_ext_mult
-    float tp_sell_main = close - risk_sell * rr_main_mult
-    float tp_sell_ext = close - risk_sell * rr_ext_mult
-    float rr_buy_main = risk_buy > 0 ? math.abs(tp_buy_main - close) / risk_buy : na
-    float rr_buy_ext = risk_buy > 0 ? math.abs(tp_buy_ext - close) / risk_buy : na
-    float rr_sell_main = risk_sell > 0 ? math.abs(close - tp_sell_main) / risk_sell : na
-    float rr_sell_ext = risk_sell > 0 ? math.abs(close - tp_sell_ext) / risk_sell : na
-    bool rr_ok_buy = risk_buy > 0 ? math.max(rr_buy_main, rr_buy_ext) >= rr_min : false
-    bool rr_ok_sell = risk_sell > 0 ? math.max(rr_sell_main, rr_sell_ext) >= rr_min : false
+    float rr_main_candidate = rr_main_mult
+    float rr_ext_candidate = rr_ext_mult
+    bool rr_mult_ok = math.max(rr_main_candidate, rr_ext_candidate) >= rr_min
+    bool rr_ok_buy = risk_buy > 0 and rr_mult_ok
+    bool rr_ok_sell = risk_sell > 0 and rr_mult_ok
     open_buy := open_buy and rr_ok_buy
     open_sell := open_sell and rr_ok_sell
 
@@ -738,8 +758,8 @@ else
 var line wl = na
 var label wll = na
 if not clean_mode and show_working_lvl and not na(working_level)
-    wl := f_line(wl, bar_index - 100, working_level, bar_index, working_level, skin_working_line_col, skin_line_w)
-    wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, skin_text_col, skin_label_size)
+    wl := f_line_styled(wl, bar_index - 100, working_level, bar_index, working_level, skin_working_line_col, skin_line_w, line.style_arrow_right)
+    wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, f_contrast_text(skin_poc_fill), skin_label_size)
 else
     if not na(wl)
         f_del_line(wl)
@@ -760,7 +780,7 @@ if not clean_mode and show_poc_lines and enable_poc
             int tests = array.get(poc_tests, i)
             color c = tests >= poc_dead_tests ? skin_dead_line : skin_poc_line
             line ln = array.get(poc_lines, i)
-            ln := f_line(ln, array.get(poc_bars, i), lvl, bar_index, lvl, c, tests >= poc_dead_tests ? 1 : skin_line_w)
+            ln := f_line_styled(ln, array.get(poc_bars, i), lvl, bar_index, lvl, c, tests >= poc_dead_tests ? 1 : skin_line_w, tests >= poc_dead_tests ? line.style_dashed : line.style_arrow_right)
             array.set(poc_lines, i, ln)
 else
     while array.size(poc_lines) > 0
@@ -768,7 +788,7 @@ else
 
 var line sl = na
 if not clean_mode and show_stop_line and position_active and not na(stop_price)
-    sl := f_line(sl, bar_index - 20, stop_price, bar_index, stop_price, skin_stop_line_col, skin_line_w)
+    sl := f_line_styled(sl, bar_index - 20, stop_price, bar_index, stop_price, skin_stop_line_col, skin_line_w, line.style_arrow_right)
 else
     if not na(sl)
         f_del_line(sl)
@@ -778,11 +798,12 @@ var label trapUpLabel = na
 var label trapDownLabel = na
 var label chochLabel = na
 if not clean_mode and trap_up_icon
-    trapUpLabel := f_label(trapUpLabel, bar_index, low, "🪤", label.style_label_up, skin_trap_col, skin_text_col, skin_label_size)
+    trapUpLabel := f_label(trapUpLabel, bar_index, low, "🪤", target_preset ? trap_up_style : label.style_label_up, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
 if not clean_mode and trap_down_icon
-    trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", label.style_label_down, skin_trap_col, skin_text_col, skin_label_size)
+    trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", target_preset ? trap_dn_style : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
 if not clean_mode and choch_icon
-    chochLabel := f_label(chochLabel, bar_index, close, "CHOCH", label.style_label_left, skin_choch_col, skin_text_col, skin_label_size)
+    label_style choch_style = target_preset ? (choch_kind == 2 ? choch_up_style : choch_kind == 4 ? choch_dn_style : label.style_label_left) : label.style_label_left
+    chochLabel := f_label(chochLabel, bar_index, close, "CHOCH", choch_style, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
 
 var box rr_open_stop_box = na
 var box rr_open_take_box = na
