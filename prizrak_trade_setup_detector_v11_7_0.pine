@@ -510,21 +510,35 @@ if in_stop
         stop_exit_cnt := 0
 
 // =========================
-// CHOCH
+// PP (DEV): variable names keep choch_* for backward wiring compatibility.
 // =========================
 [htf_ph_raw, htf_pl_raw] = request.security(syminfo.tickerid, htf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=math.max(500, choch_pivot_cap * (choch_pivot_len * 2 + 10)))
 float htf_ph = na(htf_ph_raw) ? na : htf_ph_raw
 float htf_pl = na(htf_pl_raw) ? na : htf_pl_raw
 var array<float> htf_highs = array.new_float()
 var array<float> htf_lows = array.new_float()
-if not na(htf_ph)
+var array<int> htf_high_bars = array.new_int()
+var array<int> htf_low_bars = array.new_int()
+var float pp_early_dn_level = na
+var float pp_early_dn_ref_high = na
+var float pp_early_up_level = na
+var float pp_early_up_ref_low = na
+
+bool new_htf_high = not na(htf_ph) and (array.size(htf_highs) == 0 or htf_ph != array.get(htf_highs, array.size(htf_highs) - 1))
+bool new_htf_low = not na(htf_pl) and (array.size(htf_lows) == 0 or htf_pl != array.get(htf_lows, array.size(htf_lows) - 1))
+
+if new_htf_high
     array.push(htf_highs, htf_ph)
+    array.push(htf_high_bars, math.max(bar_index - choch_pivot_len, 0))
     if array.size(htf_highs) > choch_pivot_cap
         array.shift(htf_highs)
-if not na(htf_pl)
+        array.shift(htf_high_bars)
+if new_htf_low
     array.push(htf_lows, htf_pl)
+    array.push(htf_low_bars, math.max(bar_index - choch_pivot_len, 0))
     if array.size(htf_lows) > choch_pivot_cap
         array.shift(htf_lows)
+        array.shift(htf_low_bars)
 
 htf_ready = array.size(htf_highs) >= 2 and array.size(htf_lows) >= 2
 htf_trend_up = false
@@ -543,14 +557,24 @@ choch_active := false
 choch_kind := 0
 bool pending_alive = false
 if enable_choch and htf_ready
-    bool choch_early_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_early))
-    bool choch_early_up = ta.crossover(close, htf_last_hh * (1 + choch_break_early))
-    bool choch_true_dn = ta.crossunder(close, htf_last_ll * (1 - choch_break_true))
-    bool choch_true_up = ta.crossover(close, htf_last_hh * (1 + choch_break_true))
+    if new_htf_low and not na(htf_last_hh)
+        pp_early_dn_level := array.get(htf_lows, array.size(htf_lows) - 1)
+        pp_early_dn_ref_high := htf_last_hh
 
-    bool early_evt = (htf_trend_up and choch_early_dn) or (htf_trend_down and choch_early_up)
-    int early_kind = htf_trend_up and choch_early_dn ? 1 : htf_trend_down and choch_early_up ? 3 : 0
-    int true_dir_now = htf_trend_up and choch_true_dn ? -1 : htf_trend_down and choch_true_up ? 1 : 0
+    if new_htf_high and not na(htf_last_ll)
+        pp_early_up_level := array.get(htf_highs, array.size(htf_highs) - 1)
+        pp_early_up_ref_low := htf_last_ll
+
+    bool true_dn_break = close < htf_last_ll * (1 - choch_break_true) and close[1] >= htf_last_ll * (1 - choch_break_true)
+    bool true_up_break = close > htf_last_hh * (1 + choch_break_true) and close[1] <= htf_last_hh * (1 + choch_break_true)
+    int true_dir_now = true_dn_break ? -1 : true_up_break ? 1 : 0
+
+    bool early_dn_break = not na(pp_early_dn_level) and close < pp_early_dn_level * (1 - choch_break_early) and close[1] >= pp_early_dn_level * (1 - choch_break_early)
+    bool early_up_break = not na(pp_early_up_level) and close > pp_early_up_level * (1 + choch_break_early) and close[1] <= pp_early_up_level * (1 + choch_break_early)
+    bool early_dn_guard = not na(pp_early_dn_ref_high) and htf_last_hh <= pp_early_dn_ref_high
+    bool early_up_guard = not na(pp_early_up_ref_low) and htf_last_ll >= pp_early_up_ref_low
+    bool early_evt = (early_dn_break and early_dn_guard) or (early_up_break and early_up_guard)
+    int early_kind = early_dn_break and early_dn_guard ? 1 : early_up_break and early_up_guard ? 3 : 0
 
     if choch_need_retest
         if true_dir_now != 0
@@ -821,7 +845,7 @@ if not clean_mode and trap_down_icon
     trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", target_preset ? trap_dn_style : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
 if not clean_mode and choch_icon
     label_style choch_style = target_preset ? (choch_kind == 2 ? choch_up_style : choch_kind == 4 ? choch_dn_style : label.style_label_left) : label.style_label_left
-    chochLabel := f_label(chochLabel, bar_index, close, "CHOCH", choch_style, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
+    chochLabel := f_label(chochLabel, bar_index, close, "PP", choch_style, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
 
 var box rr_open_stop_box = na
 var box rr_open_take_box = na
