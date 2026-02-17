@@ -684,8 +684,10 @@ if array.size(poc_prices) > 0
             working_level := array.get(poc_prices, i)
             break
 
-bool work_cross_up = not na(working_level) ? ta.crossover(close, working_level) : false
-bool work_cross_dn = not na(working_level) ? ta.crossunder(close, working_level) : false
+bool work_cross_up_raw = ta.crossover(close, working_level)
+bool work_cross_dn_raw = ta.crossunder(close, working_level)
+bool work_cross_up = not na(working_level) and work_cross_up_raw
+bool work_cross_dn = not na(working_level) and work_cross_dn_raw
 
 if enable_traps and not na(working_level)
     bool vol_break_ok = not trap_use_volume or volume > vol_ma * 1.2
@@ -904,7 +906,7 @@ var line rr_open_entry_line = na
 var label rr_open_stat_label = na
 if rr_draw_open and open_active and not clean_mode
     int rr_right = bar_index + rr_open_extend
-    [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] := f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
+    [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] = f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
 else
     if not na(rr_open_stop_box)
         f_del_box(rr_open_stop_box)
