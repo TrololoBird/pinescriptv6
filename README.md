@@ -27,6 +27,12 @@ If you use AI-native editors like Cursor or Windsurf:
 
 ---
 
+
+## 🧪 Development checks
+
+- `make check` — run contract and lint guards locally before commit.
+- `make contract-init` — regenerate `contract.lock.json` only when an intentional interface change is required.
+
 ## 🧠 For LLMs: Usage Instructions
 
 **If you are an LLM or AI Assistant reading this file, follow these instructions:**
