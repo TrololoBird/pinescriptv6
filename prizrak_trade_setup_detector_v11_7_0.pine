@@ -958,7 +958,7 @@ if show_rr_history and not clean_mode and barstate.islast
             box t2 = array.get(rr_hist_take2_boxes, i)
             line el = array.get(rr_hist_entry_lines, i)
             label slb = array.get(rr_hist_stat_labels, i)
-            [sb, tb, t2, el, slb] := f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, sb, tb, t2, el, slb, rr_show_stat)
+            [sb, tb, t2, el, slb] = f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, sb, tb, t2, el, slb, rr_show_stat)
             array.set(rr_hist_stop_boxes, i, sb)
             array.set(rr_hist_take_boxes, i, tb)
             array.set(rr_hist_take2_boxes, i, t2)
