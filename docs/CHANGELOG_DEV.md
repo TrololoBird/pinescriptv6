@@ -64,3 +64,13 @@
 
 ### Intentional deviations / notes
 - STF branch remains runtime-enabled but uses fixed internal timeframe constant (`STF_TF = "D"`) to preserve strict public contract compatibility.
+
+## 2026-02-18 (strict-compat verification pass)
+
+- Re-ran strict gates against canonical Pine script without modifying public interface:
+  - `make check-release`
+  - `make contract-check`
+  - `make lint`
+  - `make check-dev`
+- Confirmed `prizrak_trade_setup_detector_v11_7_0.pine` remains release-clean with contract lock parity for `indicator(...)`, all `input.*`, and all `alertcondition(...)` declarations.
+- Confirmed `contract.lock.json` was not refreshed/edited during this pass (stable strict-compat preserved).
