@@ -144,11 +144,6 @@ skin_line_w = line_w_eff
 skin_dead_line_w = 1
 skin_border_w = border_w_eff
 
-int trap_up_style = label.style_arrowup
-int trap_dn_style = label.style_arrowdown
-int choch_up_style = label.style_arrowup
-int choch_dn_style = label.style_arrowdown
-
 rr_cStop    = skin_stop_fill
 rr_cTake    = skin_take_fill
 rr_cTake2   = skin_take2_fill
@@ -1102,21 +1097,11 @@ var label trapUpLabel = na
 var label trapDownLabel = na
 var label chochLabel = na
 if not clean_mode and trap_up_icon
-    trapUpLabel := f_label(trapUpLabel, bar_index, low, "🪤", target_preset ? trap_up_style : label.style_label_up, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
+    trapUpLabel := f_label(trapUpLabel, bar_index, low, "🪤", target_preset ? label.style_arrowup : label.style_label_up, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
 if not clean_mode and trap_down_icon
-    trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", target_preset ? trap_dn_style : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
+    trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", target_preset ? label.style_arrowdown : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
 if not clean_mode and choch_icon
-    int choch_style = label.style_label_left
-    if target_preset
-        if choch_kind == 2
-            choch_style := choch_up_style
-        else if choch_kind == 4
-            choch_style := choch_dn_style
-        else
-            choch_style := label.style_label_left
-    else
-        choch_style := label.style_label_left
-    chochLabel := f_label(chochLabel, bar_index, close, "PP", choch_style, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
+    chochLabel := f_label(chochLabel, bar_index, close, "PP", target_preset ? (choch_kind == 2 ? label.style_arrowup : choch_kind == 4 ? label.style_arrowdown : label.style_label_left) : label.style_label_left, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
 
 var box rr_open_stop_box = na
 var box rr_open_take_box = na
