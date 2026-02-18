@@ -1181,6 +1181,7 @@ else if barstate.islast
 // DEBUG
 // =========================
 float debug_flat_mid = (in_flat and not na(flat_high) and not na(flat_low)) ? (flat_high + flat_low) / 2.0 : na
+int debug_flat_state_code = flat_diag_state
 int debug_pp_state = choch_active ? choch_kind : choch_confirm_dir != 0 and confirm_alive ? choch_confirm_kind : choch_pending_dir != 0 and pending_alive ? choch_pending_kind : 0
 int debug_rr_gate_state = (open_buy or open_sell) ? 1 : 0
 float debug_rr_quality = buy_setup ? rr_quality_buy : sell_setup ? rr_quality_sell : na
