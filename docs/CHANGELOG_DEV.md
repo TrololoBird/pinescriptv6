@@ -1,5 +1,9 @@
 # DEV Changelog
 
+## 2026-02-18 (docs follow-up)
+
+- Reworked `docs/PRIZRAK_TRADE_SETUP_DETECTOR_V2_ARCHITECTURE.md` to match the requested Russian full-architecture format verbatim (design-only, no Pine code).
+
 ## 2026-02-18
 
 - Added design-only architecture document `docs/PRIZRAK_TRADE_SETUP_DETECTOR_V2_ARCHITECTURE.md`:

@@ -1,139 +1,152 @@
-# Полная архитектура индикатора «Prizrak Trade Setup Detector v2.0»
+# Полная Архитектура Индикатора "Prizrak Trade Setup Detector v2.0"
 
-Документ фиксирует целевую модульную архитектуру индикатора в терминах Pine Script v6 и текущих возможностей TradingView (2026). Это спецификация уровня дизайна (без кода): последовательность расчётов, состояния, контракты данных между модулями, визуал и алерты.
+(строго на Pine Script 6, с учётом всех возможностей TradingView 2026 года, без единой строки кода)
 
-## 1. Общая концепция и цели
+## 1. Общая Концепция и Цели
 
-Индикатор должен воспроизводить логику мини-курса Prizrak Trade в одном рабочем пространстве графика.
+Индикатор полностью воспроизводит логику мини-курса Prizrak Trade (69 страниц) на одном графике.
 
-Базовая иерархия:
-- **СТФ (D1/W1)**: определяет **приоритет направления** (`long` / `short` / `flat`).
-- **МТФ (H4/H1)**: определяет **структуру рынка** и ключевые рабочие уровни.
-- **Entry TF (15m/5m)**: отвечает только за **вход и подтверждение** (2+ баров, объём, дивергенции).
+Главная идея:
+- **СТФ** (D1 или W1) — определяет **приоритет направления** (шорт/лонг/флэт).
+- **МТФ** (H4 или H1) — определяет **структуру** и ключевые уровни.
+- **Младший ТФ** (15m / 5m) — только **вход + подтверждение** (2+ бара, объём, дивергенция).
 
-Принцип: **не смешивать уровни между ТФ**. Цель — снижать ложные сигналы, сохранять чистый визуал и поддерживать `clean mode`.
+Никогда не смешивать уровни разных ТФ.
 
-## 2. Модульная структура
+Цель: минимум ложных сигналов, чёткие сетапы с RR, чистый визуал, поддержка clean mode.
 
-### 2.1 Группы входных параметров (inputs)
+## 2. Структура Индикатора (Модульная Архитектура)
 
-Архитектура предусматривает 11 логических групп:
-1. **Основные модули** (enable/disable блоков: accumulation, POC, stop volume, traps, PP, filters, RR gate).
-2. **Накопления** (`min_touches`, `min_touches_side`, `flat_max_range_pct`, early/true break %, auto/manual flat length по ТФ).
-3. **POC / рабочий уровень** (`bins`, `max_keep`, `dead_tests`, `price_mode` HLC3/VWAP, `bin_min_pct`).
-4. **Стоповый объём** (`stop_len`, `stop_range_atr_mult`, `stop_vol_mult`, early break %, `stop_density_mult`).
-5. **Ловушки** (`trap_max_bars`, `trap_vol_drop`, `trap_cooldown`).
-6. **PP (переприор)** (`pp_htf`, `pivot_len`, early/true break %, `need_retest`, `pp_retest_bars`).
-7. **Фильтры** (`rsi_len`, MACD-параметры, `div_lookback`).
-8. **Сетапы** (`atr_proximity`, `allow_countertrend`, `rr_min`, `rr_main_mult`, `rr_ext_mult`).
-9. **Визуализация** (`clean_mode`, `show_boxes`, `show_poc_lines`, `show_stop_line`, squeeze params, target preset).
-10. **RR Overlay** (`show_history`, `show_stat_labels`, `draw_open_trade`, `history_keep`).
-11. **Debug** (`debug_mode`, `show_debug_table`).
+### 2.1. Inputs (7 групп)
 
-### 2.2 Управление состоянием (state)
+- **Основные модули** — включение/выключение каждого блока (накопления, POC, стоповый объём, ловушки, PP, фильтры, RR gate).
+- **Накопления** — min touches (4), min touches на сторону (2), max range % (5%), early/true break %, auto/manual длина флэта по ТФ.
+- **POC / рабочий уровень** — bins, max keep, dead tests, price mode (HLC3/VWAP), bin min %.
+- **Стоповый объём** — окно, max range %, vol mult, early break %, density ATR filter.
+- **Ловушки** — max bars window, vol drop factor, cooldown.
+- **PP (переприор)** — HTF, pivot length, early/true break %, need retest, retest bars.
+- **Фильтры** — RSI len, MACD params, div lookback.
+- **Сетапы** — ATR proximity, allow countertrend, RR min, main/ext mult.
+- **Визуализация** — clean mode, show boxes, show POC lines, show stop line, squeeze params, target preset.
+- **RR Overlay** — show history, show stat labels, draw open trade, history keep.
+- **Debug** — debug mode, show debug table.
 
-Все долгоживущие сущности держатся в `var`/`varip`-состояниях и массивах:
-- Текущий флэт: `high`, `low`, `touches_top`, `touches_bottom`, `start_bar`.
-- POC-контейнер: массивы `prices`, `bars`, `tests`.
-- Стоповый объём: `high`, `low`, `start_bar`, `volume_event`.
-- PP-машина: `pending/confirm`, `level`, `bar`, `count`.
-- Открытая сделка: `dir`, `entry`, `stop`, `tp_main`, `tp_ext`, `breakeven`.
-- RR-история: массивы `dir`, `entry`, `exit`, `rr`, `result`, `bars`.
+### 2.2. State Management
 
-### 2.3 Core-модули и строгий порядок исполнения на каждом баре
+- Все переменные с `var` или `varip`.
+- Отдельные структуры для:
+  - Текущего флэта (`high`, `low`, `touches_top`, `touches_bottom`, `start_bar`).
+  - POC массива (`prices`, `bars`, `tests`).
+  - Стопового объёма (`high`, `low`, `start_bar`, `volume_event`).
+  - PP (`pending` / `confirm`, `level`, `bar`, `count`).
+  - Открытой позиции (`dir`, `entry`, `stop`, `tp_main`, `tp_ext`, `breakeven`).
+  - RR истории (arrays для `dir`, `entry`, `exit`, `rr`, `result`, `bars`).
 
-1. **MTF Trend Direction** (через `request.security` D1/W1): выход `+1`, `-1`, `0`.
-2. **Accumulation / Flat Detection** (МТФ H4/H1): диапазон, касания, valid-state, early/true-break.
-3. **POC / рабочий уровень**: профиль объёма по флэту, удаление уровня по `dead_tests`.
-4. **Стоповый объём**: low-range + volume spike + ATR density.
-5. **Traps** (Entry TF): ложный структурный пробой против МТФ-приоритета, low volume, нет подтверждения.
-6. **PP (early/true + pending)**: break, retest, подтверждение 2+ барами, trigger от объёма/дивергенции.
-7. **Фильтры** (RSI/MACD/BBW, дивергенции, squeeze).
+### 2.3. Core Modules (выполняются в строгом порядке каждый бар)
 
-### 2.4 Setup Engine (главный блок принятия решения)
+1. **МТФ Trend Direction** (`request.security` D1/W1)
+   - Возвращает: `+1` (up), `-1` (down), `0` (flat).
 
-- **BUY**: удержание Discount + подтверждение на Entry TF + bullish-фильтры (+ optional countertrend).
-- **SELL**: rejection в Premium/EQ + подтверждение + bearish-фильтры.
-- **RR Gate**:
-  - `main target = risk × 1.618`
-  - `ext target = risk × 2.618`
-  - активация сетапа только при `RR >= rr_min`.
+2. **Накопление (Flat Detection)** — на МТФ (H4)
+   - Формула: `cand_high = highest(high, max_flat_bars)`, `cand_low = lowest(low, max_flat_bars)`.
+   - Касания: `touch_top`, если `high >= flat_high - tolerance`; `touch_bottom`, если `low <= flat_low + tolerance`.
+   - Условие активного флэта: `total_touches >= min_touches` И касания на каждую сторону `>= min_touches_side` И `range % <= flat_max_range_pct`.
+   - Early break: цена вышла за границу на `flat_break_early %`.
+   - True break: цена вышла на `flat_break_true %` + 2+ бара подтверждения.
 
-При активации создаётся открытая сделка и объектная RR-визуализация.
+3. **Рабочий уровень (POC)** — на МТФ (H4)
+   - Профиль объёма по `HLC3` или `VWAP` за период флэта.
+   - `POC` = цена бина с максимальным объёмом.
+   - Снимается после `poc_dead_tests` тестов (тест = цена коснулась уровня и закрылась за ним).
 
-### 2.5 Визуальная система
+4. **Стоповый объём** — на МТФ (H4)
+   - Окно `stop_len` баров.
+   - Условие: диапазон `<= ATR × stop_range_atr_mult` И плотность `(max-min)/ATR <= stop_density_mult` И объём хотя бы одного бара `>= vol_ma × stop_vol_mult`.
 
-- **Clean Mode**: только EQ, Premium, Discount, PDL, Weak Low, активный POC.
-- **Boxes**: зоны флэта (зелёный для up-приоритета, красный для down).
-- **Линии**: POC (жёлтая), stop-line (красная пунктирная), RR-зоны (полупрозрачные).
-- **Labels**: BUY/SELL, TRAP (оранжевый), PP TRUE (фиолетовый).
-- **RR Overlay**: stop-box, TP1-box, TP2-box, entry-line, статус RR/result.
-- **История RR**: последние N закрытых сделок с цветом исхода.
+5. **Ловушки (Traps)** — на младшем (15m)
+   - False BOS/CHoCH на младшем против тренда МТФ.
+   - Условие: break структуры + low vol (`volume < vol_ma × trap_vol_drop`) + no conf bars.
 
-### 2.6 Alerts
+6. **Переприор (PP true/false)** — на МТФ (H4)
+   - `PP true` = break структуры + retest уровня + 2+ бара подтверждения + volume spike или дивергенция.
+   - `PP early` = break без retest.
+   - `PP pending` — ждёт retest (`pp_retest_bars`).
 
-- `Prizrak BUY`
-- `Prizrak SELL`
-- `Prizrak TRAP`
-- `Prizrak PP TRUE`
-- `Prizrak BREAKEVEN`
+7. **Фильтры** — RSI/MACD/BBW на младшем (15m)
+   - Bull/Bear div (`div_lookback`).
+   - Squeeze = `BBW < BBW_ma × squeeze_factor`.
 
-### 2.7 Debug и диагностика
+### 2.4. Setup Engine (главный блок)
 
-- Таблица (`top_right`) по состоянию модулей: flat-valid, PP-state, trap-flag, RR-quality и др.
-- Локальные debug-labels на графике при `debug_mode = true`.
-- Кольцевой лог последних событий (array строк).
+- BUY setup = hold Discount + conf на 15m + bull фильтры (и optionally `allow_counter`).
+- SELL setup = rejection Premium/EQ + conf на 15m + bear фильтры.
+- RR Gate: рассчитывается от предполагаемого входа к стопу и TP (`main = ×1.618`, `ext = ×2.618`).
+- Только если `RR >= rr_min` — сетап активен.
+- При активации: рисуем открытую сделку (RR overlay).
 
-## 3. Таймфрейм-контракт архитектуры
+### 2.5. Визуальная Система
 
-- **СТФ**: D1 (или W1) — только приоритет направления.
-- **МТФ**: H4 (или H1) — структура, PP, POC, accumulation, stop-volume.
-- **Entry TF**: текущий график 15m/5m — вход и подтверждение.
+- **Clean Mode**: только ключевые линии (`EQ`, `Premium`, `Discount`, `PDL`, `Weak Low`, рабочий `POC`).
+- **Boxes**: флэт-боксы (зелёный если up тренд, красный если down тренд).
+- **Линии**: `POC` (жёлтая), stop line (красная), RR zones (полупрозрачные).
+- **Labels**: BUY/SELL (зелёный/красный), TRAP (оранжевый ромб), PP TRUE (фиолетовый).
+- **RR Overlay**: для открытой сделки — 3 бокса (`stop`, `TP1`, `TP2`) + `entry line` + stat label (`RR` и результат).
+- **История RR**: последние `N` сделок (настраиваемо) с цветом результата (зелёный/красный).
 
-Требование к MTF-запросам: `request.security(..., lookahead = barmerge.lookahead_off)`.
+### 2.6. Alerts
 
-## 4. Расчётные формулы (псевдо-математика)
+- `Prizrak BUY` / `Prizrak SELL` — при активации сетапа.
+- `Prizrak TRAP` — при обнаружении ловушки.
+- `Prizrak PP TRUE` — при истинном переприоре.
+- `Prizrak BREAKEVEN` — когда позиция переведена в BE.
 
-- `flat_range_pct = (high - low) / low * 100`
-- `touch_tolerance = ATR * touch_tolerance_factor`
-- `RR = (TP - entry) / (entry - stop)`
-- `poc_bin_size = (high - low) / bins`, минимум `syminfo.mintick * factor`
-- `squeeze = BBW < BBW_MA * squeeze_factor`
-- `PP_true = break + retest + 2+ bars + (volume > vol_ma * 1.5 | divergence)`
+### 2.7. Debug & Diagnostics
 
-## 5. Визуальные токены и стиль
+- Debug table (`top_right`) с состоянием всех модулей (`flat valid`, `PP state`, `RR quality`, `trap flag` и т.д.).
+- Debug labels на графике (при `debug_mode = true`).
+- Лог последних событий (array строк).
 
-- Premium: тёмно-красный, полупрозрачный.
-- Discount: тёмно-зелёный, полупрозрачный.
-- EQ: серая линия.
-- POC: жёлтая линия.
-- Stop-line: красная пунктирная.
-- RR-зоны: зелёный/красный, прозрачность ~80%.
-- Labels: `normal/small`, стиль `arrow` или `label_left`.
+## 3. Таймфреймы в Архитектуре
 
-## 6. Операционный flow (bar-by-bar)
+- **СТФ** — D1 (или W1 по выбору пользователя) — только направление тренда.
+- **МТФ** — H4 (основной) или H1 (альтернатива) — накопления, структура, PP, POC, стоповый объём.
+- **Entry TF** — текущий график (15m или 5m) — вход, подтверждение 2+ баров, дивергенция, trap detection.
 
-1. Получить СТФ-приоритет.
-2. Рассчитать accumulation на МТФ.
-3. Рассчитать POC/рабочий уровень.
-4. Рассчитать stop-volume.
-5. Проверить traps на Entry TF.
-6. Проверить PP (`pending/confirm/true`).
-7. Применить фильтры RSI/MACD/BBW/div/squeeze.
+Все `request.security` делаются с `lookahead = barmerge.lookahead_off`.
+
+## 4. Формулы (псевдо-математика)
+
+- Flat range % = `(high - low) / low × 100`.
+- Touch tolerance = `ATR × touch_tolerance`.
+- RR = `(TP - entry) / (entry - stop)`.
+- POC bin size = `(high - low) / bins`, с min bin = `syminfo.mintick × factor`.
+- Squeeze = `BBW < BBW_ma × squeeze_factor`.
+- PP true = `break + retest + 2+ bars + volume > vol_ma × 1.5`.
+
+## 5. Визуал (цвета и стиль)
+
+- Premium — тёмно-красный полупрозрачный.
+- Discount — тёмно-зелёный полупрозрачный.
+- EQ — серая линия.
+- POC — жёлтая линия.
+- Stop line — красная пунктирная.
+- RR zones — зелёный/красный с прозрачностью 80%.
+- Labels — размер `normal/small`, стиль `arrow` или `label_left`.
+
+## 6. Flow расчёта (порядок выполнения каждый бар)
+
+1. Получить СТФ тренд.
+2. Рассчитать накопление на МТФ.
+3. Рассчитать POC / рабочий уровень.
+4. Рассчитать стоповый объём.
+5. Проверить ловушки.
+6. Проверить PP (`pending / confirm`).
+7. Применить фильтры (`RSI/MACD/BBW`).
 8. Сформировать BUY/SELL setup.
-9. При валидном сетапе построить RR overlay.
-10. Обновить RR-историю.
-11. Отрисовать визуал (`clean/full`).
-12. Сгенерировать alert-сигналы.
-13. Обновить debug-table и event-log.
+9. Если сетап активен — нарисовать RR overlay.
+10. Обновить историю RR.
+11. Нарисовать визуал (`clean mode` или полный).
+12. Выдать алерты.
+13. Обновить debug table.
 
-## 7. Границы ответственности и неизменяемые принципы
-
-- Entry-модуль не пересчитывает структуру МТФ.
-- СТФ не принимает решение о входе; только задаёт приоритет.
-- Любой setup считается валидным только после прохождения RR gate.
-- `clean_mode` обязан скрывать второстепенный визуальный шум без потери ключевых уровней.
-
-## 8. Связь с текущей спецификацией репозитория
-
-Этот документ дополняет `docs/COURSE_LOGIC_SPEC.md` как целевую архитектуру версии `v2.0` (design-level) и может использоваться как источник требований для поэтапной реализации модулей и DEV-валидации.
+Эта архитектура полностью соответствует курсу Prizrak Trade, учитывает скриншоты и замечания, и остаётся в границах design-only спецификации (без Pine-кода).
