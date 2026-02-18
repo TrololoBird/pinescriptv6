@@ -51,16 +51,20 @@ group_traps = "Ловушки"
 trap_max_bars = input.int(8, "Окно ловушки", minval=2, maxval=50, group=group_traps)
 trap_vol_drop = input.float(0.75, "Падение объёма от MA *", step=0.05, minval=0.1, maxval=2.0, group=group_traps)
 trap_use_volume = input.bool(false, "Использовать фильтр объёма", group=group_traps)
+trap_need_tf_mismatch = input.bool(true, "Trap: нужен TF mismatch", group=group_traps)
 icon_cooldown = input.int(0, "Icon cooldown", minval=0, maxval=200, group=group_traps)
 
 group_choch = "PP"
 htf              = input.timeframe("240", "HTF", group=group_choch)
+stf              = input.timeframe("D", "STF direction TF", group=group_choch)
 choch_pivot_len  = input.int(10, "Pivot length", minval=2, maxval=50, group=group_choch)
 choch_pivot_cap  = input.int(10, "Pivot cap", minval=2, maxval=200, group=group_choch)
 choch_break_early = input.float(0.5, "PP EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
 choch_break_true  = input.float(1.0, "PP TRUE (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
 choch_need_retest = input.bool(true, "PP need retest", group=group_choch)
 choch_retest_bars = input.int(3, "PP retest bars", minval=1, maxval=20, group=group_choch)
+pp_confirm_bars = input.int(2, "PP confirm bars", minval=1, maxval=5, group=group_choch)
+pp_confirm_vol_mult = input.float(1.1, "PP volume >= MA *", step=0.05, minval=0.5, maxval=3.0, group=group_choch)
 
 // PP aliases over legacy choch_* runtime variables
 pp_enabled = enable_choch
@@ -83,6 +87,7 @@ rr_gate_enabled    = input.bool(true, "RR gate", group=group_setups)
 rr_min             = input.float(3.0, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
 rr_main_mult       = input.float(1.618, "Main TP mult", step=0.001, minval=0.1, maxval=10, group=group_setups)
 rr_ext_mult        = input.float(2.618, "Ext TP mult", step=0.001, minval=0.1, maxval=20, group=group_setups)
+sl_min_atr_mult    = input.float(1.5, "Min SL ATR mult", step=0.1, minval=0.5, maxval=5.0, group=group_setups)
 
 
 group_vis = "Визуализация"
@@ -398,6 +403,7 @@ var float choch_confirm_level = na
 var int choch_confirm_bar = na
 var int choch_confirm_count = 0
 var int htf_trend_dir_cache = 0
+var int stf_trend_dir_cache = 0
 
 var bool position_active = false
 var string position_dir = ""
@@ -658,7 +664,6 @@ var float pp_early_dn_level = na
 var float pp_early_dn_ref_high = na
 var float pp_early_up_level = na
 var float pp_early_up_ref_low = na
-int pp_confirm_bars = 2
 
 bool new_htf_high = not na(htf_ph) and (array.size(htf_highs) == 0 or htf_ph != array.get(htf_highs, array.size(htf_highs) - 1))
 bool new_htf_low = not na(htf_pl) and (array.size(htf_lows) == 0 or htf_pl != array.get(htf_lows, array.size(htf_lows) - 1))
@@ -689,6 +694,33 @@ if htf_ready
     bool htf_trend_down = htf_last_hh < htf_prev_hh
     htf_trend_dir := htf_trend_up and not htf_trend_down ? 1 : htf_trend_down and not htf_trend_up ? -1 : 0
 htf_trend_dir_cache := htf_trend_dir
+
+[stf_ph_raw, stf_pl_raw] = request.security(syminfo.tickerid, stf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=math.max(500, choch_pivot_cap * (choch_pivot_len * 2 + 10)))
+float stf_ph = na(stf_ph_raw) ? na : stf_ph_raw
+float stf_pl = na(stf_pl_raw) ? na : stf_pl_raw
+var array<float> stf_highs = array.new_float()
+var array<float> stf_lows = array.new_float()
+bool new_stf_high = not na(stf_ph) and (array.size(stf_highs) == 0 or stf_ph != array.get(stf_highs, array.size(stf_highs) - 1))
+bool new_stf_low = not na(stf_pl) and (array.size(stf_lows) == 0 or stf_pl != array.get(stf_lows, array.size(stf_lows) - 1))
+if new_stf_high
+    array.push(stf_highs, stf_ph)
+    if array.size(stf_highs) > choch_pivot_cap
+        array.shift(stf_highs)
+if new_stf_low
+    array.push(stf_lows, stf_pl)
+    if array.size(stf_lows) > choch_pivot_cap
+        array.shift(stf_lows)
+int stf_trend_dir = 0
+bool stf_ready = array.size(stf_highs) >= 2 and array.size(stf_lows) >= 2
+if stf_ready
+    float stf_last_hh = array.get(stf_highs, array.size(stf_highs) - 1)
+    float stf_prev_hh = array.get(stf_highs, array.size(stf_highs) - 2)
+    float stf_last_ll = array.get(stf_lows, array.size(stf_lows) - 1)
+    float stf_prev_ll = array.get(stf_lows, array.size(stf_lows) - 2)
+    bool stf_up = stf_last_ll > stf_prev_ll
+    bool stf_down = stf_last_hh < stf_prev_hh
+    stf_trend_dir := stf_up and not stf_down ? 1 : stf_down and not stf_up ? -1 : 0
+stf_trend_dir_cache := stf_trend_dir
 
 choch_active := false
 choch_kind := 0
@@ -755,7 +787,9 @@ if pp_enabled and htf_ready
         float confirm_thr = choch_confirm_kind == 2 or choch_confirm_kind == 4 ? pp_break_true : pp_break_early
         float confirm_level = choch_confirm_dir == -1 ? choch_confirm_level * (1 - confirm_thr) : choch_confirm_level * (1 + confirm_thr)
         bool confirm_bar_ok = choch_confirm_dir == -1 ? close < confirm_level : close > confirm_level
-        choch_confirm_count := confirm_bar_ok ? choch_confirm_count + 1 : 0
+        bool confirm_vol_ok = volume >= vol_ma * pp_confirm_vol_mult
+        bool confirm_final_ok = confirm_bar_ok and confirm_vol_ok
+        choch_confirm_count := confirm_final_ok ? choch_confirm_count + 1 : 0
         if choch_confirm_count >= pp_confirm_bars
             choch_active := true
             choch_kind := choch_confirm_kind
@@ -851,11 +885,15 @@ if enable_traps and not na(working_level)
 bool trap_up = false
 bool trap_down = false
 int trap_flag = 0
+bool tf_mismatch_up = htf_trend_dir == -1 or stf_trend_dir == -1
+bool tf_mismatch_down = htf_trend_dir == 1 or stf_trend_dir == 1
+bool trap_tf_ok_up = not trap_need_tf_mismatch or tf_mismatch_up
+bool trap_tf_ok_down = not trap_need_tf_mismatch or tf_mismatch_down
 if not na(last_break_bar) and not na(working_level)
     in_window = (bar_index - last_break_bar) <= trap_max_bars
     bool vol_trap_ok = not trap_use_volume or volume < vol_ma * trap_vol_drop
-    trap_up := last_break_dir == "up" and in_window and close < working_level and vol_trap_ok
-    trap_down := last_break_dir == "down" and in_window and close > working_level and vol_trap_ok
+    trap_up := last_break_dir == "up" and in_window and close < working_level and vol_trap_ok and trap_tf_ok_up
+    trap_down := last_break_dir == "down" and in_window and close > working_level and vol_trap_ok and trap_tf_ok_down
 trap_flag := trap_up ? 1 : trap_down ? -1 : 0
 
 int trap_diag_state = not enable_traps ? -4 : na(working_level) ? -3 : na(last_break_bar) ? -2 : (bar_index - last_break_bar) > trap_max_bars ? -1 : trap_flag != 0 ? 1 : 0
@@ -909,8 +947,10 @@ near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref 
 bool htf_buy_priority = htf_trend_dir == 1
 bool htf_sell_priority = htf_trend_dir == -1
 bool htf_neutral = htf_trend_dir == 0
-bool buy_dir_ok = htf_buy_priority or htf_neutral or allow_counter
-bool sell_dir_ok = htf_sell_priority or htf_neutral or allow_counter
+bool stf_buy_priority = stf_trend_dir == 1 or stf_trend_dir == 0
+bool stf_sell_priority = stf_trend_dir == -1 or stf_trend_dir == 0
+bool buy_dir_ok = (htf_buy_priority or htf_neutral) and stf_buy_priority or allow_counter
+bool sell_dir_ok = (htf_sell_priority or htf_neutral) and stf_sell_priority or allow_counter
 buy_setup = not pp_block_buy and work_cross_up and buy_dir_ok and bull_ok and near_level
 sell_setup = not pp_block_sell and work_cross_dn and sell_dir_ok and bear_ok and near_level
 
@@ -942,10 +982,14 @@ bool rr_mult_ok = true
 float rr_quality_buy = na
 float rr_quality_sell = na
 if buy_setup or sell_setup
-    float st_buy = not na(last_flat_low) and last_flat_valid ? last_flat_low : close - atr
-    float st_sell = not na(last_flat_high) and last_flat_valid ? last_flat_high : close + atr
-    float risk_buy = math.abs(close - st_buy)
-    float risk_sell = math.abs(close - st_sell)
+    float en_buy = not na(working_level) ? working_level : close
+    float en_sell = not na(working_level) ? working_level : close
+    float st_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : en_buy - atr * sl_min_atr_mult
+    float st_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : en_sell + atr * sl_min_atr_mult
+    float st_buy = math.min(st_buy_raw, en_buy - atr * sl_min_atr_mult)
+    float st_sell = math.max(st_sell_raw, en_sell + atr * sl_min_atr_mult)
+    float risk_buy = math.abs(en_buy - st_buy)
+    float risk_sell = math.abs(en_sell - st_sell)
     rr_quality_buy := risk_buy > 0 ? math.max(rr_main_mult, rr_ext_mult) : na
     rr_quality_sell := risk_sell > 0 ? math.max(rr_main_mult, rr_ext_mult) : na
     rr_mult_ok := math.max(rr_main_mult, rr_ext_mult) >= rr_min
@@ -957,8 +1001,10 @@ if debug_mode and barstate.islast and rr_gate_enabled and (buy_setup or sell_set
 if not position_active and (open_buy or open_sell)
     position_active := true
     position_dir := open_buy ? "BUY" : "SELL"
-    entry_price := close
-    stop_price := position_dir == "BUY" ? (not na(last_flat_low) and last_flat_valid ? last_flat_low : close - atr) : (not na(last_flat_high) and last_flat_valid ? last_flat_high : close + atr)
+    entry_price := not na(working_level) ? working_level : close
+    float stop_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : entry_price - atr * sl_min_atr_mult
+    float stop_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : entry_price + atr * sl_min_atr_mult
+    stop_price := position_dir == "BUY" ? math.min(stop_buy_raw, entry_price - atr * sl_min_atr_mult) : math.max(stop_sell_raw, entry_price + atr * sl_min_atr_mult)
     float risk = math.abs(entry_price - stop_price)
     tp_main := position_dir == "BUY" ? entry_price + risk * rr_main_mult : entry_price - risk * rr_main_mult
     tp_ext := position_dir == "BUY" ? entry_price + risk * rr_ext_mult : entry_price - risk * rr_ext_mult
@@ -1218,6 +1264,7 @@ float debug_last_pivot_low = htf_last_ll
 float debug_prev_pivot_high = array.size(htf_highs) >= 2 ? array.get(htf_highs, array.size(htf_highs) - 2) : na
 float debug_prev_pivot_low = array.size(htf_lows) >= 2 ? array.get(htf_lows, array.size(htf_lows) - 2) : na
 int debug_htf_trend_dir = htf_trend_dir
+int debug_stf_trend_dir = stf_trend_dir
 float debug_flat_age = in_flat and not na(flat_start) ? bar_index - flat_start : na
 float debug_flat_rng_atr = in_flat and not na(flat_high) and not na(flat_low) and atr > 0 ? (flat_high - flat_low) / atr : na
 float debug_risk = position_active and not na(entry_price) and not na(stop_price) ? math.abs(entry_price - stop_price) : na
@@ -1240,7 +1287,7 @@ string debug_diag_last = f_dbg_last(DBG_SHOW_LAST)
 
 if debug_mode and show_debug_table and barstate.islast
     if na(debug_table)
-        debug_table := table.new(position.top_right, 2, 20, border_width=1)
+        debug_table := table.new(position.top_right, 2, 21, border_width=1)
     table.cell(debug_table, 0, 0, "htf_trend_dir")
     table.cell(debug_table, 1, 0, str.tostring(debug_htf_trend_dir))
     table.cell(debug_table, 0, 1, "flat cand/valid")
@@ -1281,6 +1328,8 @@ if debug_mode and show_debug_table and barstate.islast
     table.cell(debug_table, 1, 18, str.tostring(debug_last_pivot_high, format.mintick) + "/" + str.tostring(debug_last_pivot_low, format.mintick))
     table.cell(debug_table, 0, 19, "diag last")
     table.cell(debug_table, 1, 19, debug_diag_last)
+    table.cell(debug_table, 0, 20, "stf_trend_dir")
+    table.cell(debug_table, 1, 20, str.tostring(debug_stf_trend_dir))
 else
     if not na(debug_table)
         table.delete(debug_table)
@@ -1304,6 +1353,7 @@ plot(debug_mode ? debug_poc_level : na, "DBG POC Level", color=skin_poc_line, li
 plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
 plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_stepline)
 plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_stepline)
+plot(debug_mode ? debug_stf_trend_dir : na, "DBG STF Trend Dir", color=skin_poc_line, linewidth=1, style=plot.style_stepline)
 plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flag", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
 plot(debug_mode ? debug_rr_quality : na, "DBG RR Quality", color=skin_take_fill, linewidth=1, style=plot.style_line)
 plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns)
