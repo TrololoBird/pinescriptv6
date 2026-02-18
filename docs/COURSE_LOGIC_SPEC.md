@@ -146,11 +146,12 @@ Where:
   - true event immediate;
   - early event as fallback.
 
-### 3.6 RR gate boolean
-When setup candidate exists (`open_buy` or `open_sell`), gate requires:
-- strictly positive risk (`risk_buy > 0` or `risk_sell > 0`)
-- multiplier policy `max(rr_main_mult, rr_ext_mult) >= rr_min`
+### 3.6 RR quality gate (DEV)
+When setup candidate exists, RR quality is evaluated with:
+- strictly positive risk (`risk_buy > 0` or `risk_sell > 0`),
+- multiplier policy `max(rr_main_mult, rr_ext_mult) >= rr_min`.
 
+In current DEV mode this result is emitted as telemetry (`rr_quality`, `rr_ok_*`) and does **not** suppress setup/open creation.
 Default DEV floor: `rr_min = 3.0`.
 
 ## 4) Edge cases and runtime safety
@@ -229,3 +230,46 @@ When `debug_mode=false`, no debug plots/table are rendered.
 Optional with `show_debug_table=true`:
 - rows for latest scalar states (`flat_valid`, `pp_state`, `poc_level`, `trap_flags`, RR multipliers, etc.)
 - updated only on `barstate.islast`.
+
+
+## 8) DEV milestone behavior (logic-validation mode)
+
+The current DEV implementation intentionally prioritizes signal observability/correctness validation over strict gating.
+
+### 8.1 HTF influence mode (bias, not hard gate)
+- HTF direction (`htf_trend_dir`) biases setup side preference.
+- Neutral HTF (`htf_trend_dir=0`) does not hard-block setup detection.
+- Flat lifecycle (candidate/finalize) does **not** require HTF readiness in DEV.
+
+### 8.2 PP phase handling for setup blocking
+- PP runtime phases are represented by `choch_kind` codes:
+  - `1` early down, `2` true down, `3` early up, `4` true up.
+- Active PP blocks only counter-direction setups:
+  - block BUY when kind is down (`1/2`),
+  - block SELL when kind is up (`3/4`).
+- Pending/retest/confirm phases are diagnostic states and do not hard-block aligned entries in DEV.
+
+### 8.3 Flat validation relaxation
+- Flat candidate/final validity keeps range + touch constraints.
+- Side-touch requirement is relaxed by a high-touch override:
+  - pass if side minimums are met **or** total touches exceed elevated threshold (`min_touch_req + min_touches_side`).
+
+### 8.4 Trap semantics in DEV
+- Trap module produces `trap_flag` (`1` up-trap, `-1` down-trap, `0` none) for diagnostics.
+- Trap conditions flag context and visuals; they do not suppress setup creation.
+- Trap debug decomposition includes break detection, trap window status, and trap volume gate pass.
+
+### 8.5 RR gate semantics in DEV
+- RR checks are computed as quality telemetry (`rr_quality`, multiplier/risk validity).
+- Setup/open signal creation is not suppressed by RR in DEV validation mode.
+- RR quality remains exposed in debug table/plots for post-run analysis.
+
+### 8.6 Observability contract (debug harness)
+When `debug_mode=true` and `show_debug_table=true`, debug table reports module-level states suitable for TV feedback triage:
+- Flat: state code, last finalize bar, hi/lo, touches, exit confirm.
+- POC: working level, working tests, active POC count.
+- Stop-volume: event flag + tracked level.
+- Trap: flag + break/window/volume gate components.
+- PP: state text/code + pending dir + confirm count.
+- HTF: trend dir + previous/latest pivot pairs.
+- RR: gate/quality + requested/effective history keep and budget caps.

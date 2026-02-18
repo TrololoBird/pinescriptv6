@@ -349,6 +349,7 @@ var float flat_low = na
 var int touches_top = 0
 var int touches_bottom = 0
 var int exit_confirm_cnt = 0
+var int last_flat_finalized_bar = na
 
 var float last_flat_high = na
 var float last_flat_low = na
@@ -363,6 +364,7 @@ var int stop_start = na
 var float stop_high = na
 var float stop_low = na
 var int stop_exit_cnt = 0
+var bool stop_volume_event = false
 
 var int last_break_bar = na
 var string last_break_dir = ""
@@ -447,7 +449,20 @@ var int dbg_setup_state = na
 var int dbg_visual_state = na
 
 int internal_poc_keep = math.max(1, int(math.floor(max_poc_keep * 0.8)))
-int internal_rr_keep = math.max(5, int(math.floor(rr_hist_keep * 0.8)))
+int rr_boxes_per_trade = 3
+int rr_lines_per_trade = 1
+int rr_labels_per_trade = 1
+int rr_safety_margin = 40
+int rr_other_box_budget = 16
+int rr_other_line_budget = 32
+int rr_other_label_budget = 20
+int rr_keep_requested = rr_hist_keep
+int rr_keep_dev_cap = math.max(5, int(math.floor(rr_hist_keep * 0.8)))
+int rr_keep_by_boxes = math.max(5, int(math.floor(math.max(0, 300 - rr_safety_margin - rr_other_box_budget) / rr_boxes_per_trade)))
+int rr_keep_by_lines = math.max(5, int(math.floor(math.max(0, 500 - rr_safety_margin - rr_other_line_budget) / rr_lines_per_trade)))
+int rr_keep_by_labels = math.max(5, int(math.floor(math.max(0, 500 - rr_safety_margin - rr_other_label_budget) / rr_labels_per_trade)))
+int rr_keep_budgeted = math.max(5, math.min(rr_keep_requested, rr_keep_dev_cap, rr_keep_by_boxes, rr_keep_by_lines, rr_keep_by_labels))
+int internal_rr_keep = rr_keep_budgeted
 
 // =========================
 // ACCUMULATION
@@ -465,9 +480,11 @@ if enable_accum and not in_flat and bar_index >= max_flat_bars
         cand_touch_bot += low[i] <= cand_low * (1 + touch_tolerance) ? 1 : 0
 
 int min_touch_req = math.max(min_touches, 4)
-bool htf_priority_flat_ok = not pp_enabled or htf_trend_dir_cache != 0
-cand_ok = enable_accum and not in_flat and bar_index >= max_flat_bars and htf_priority_flat_ok and cand_rng_pct <= flat_max_range_pct and cand_touch_top + cand_touch_bot >= min_touch_req and cand_touch_top >= min_touches_side and cand_touch_bot >= min_touches_side
-int flat_diag_state = not enable_accum ? -5 : in_flat ? -4 : bar_index < max_flat_bars ? -3 : not htf_priority_flat_ok ? -2 : cand_rng_pct > flat_max_range_pct ? -1 : (cand_touch_top + cand_touch_bot < min_touch_req or cand_touch_top < min_touches_side or cand_touch_bot < min_touches_side) ? 0 : 1
+int flat_touch_total = cand_touch_top + cand_touch_bot
+int flat_high_touch_req = min_touch_req + min_touches_side
+bool cand_sides_ok = (cand_touch_top >= min_touches_side and cand_touch_bot >= min_touches_side) or flat_touch_total >= flat_high_touch_req
+cand_ok = enable_accum and not in_flat and bar_index >= max_flat_bars and cand_rng_pct <= flat_max_range_pct and flat_touch_total >= min_touch_req and cand_sides_ok
+int flat_diag_state = not enable_accum ? -5 : in_flat ? -4 : bar_index < max_flat_bars ? -3 : cand_rng_pct > flat_max_range_pct ? -1 : (flat_touch_total < min_touch_req or not cand_sides_ok) ? 0 : 1
 if debug_mode and barstate.islast and flat_diag_state != dbg_flat_state
     if flat_diag_state == -5
         f_dbg_push("FLAT:off enable_accum=0")
@@ -475,8 +492,6 @@ if debug_mode and barstate.islast and flat_diag_state != dbg_flat_state
         f_dbg_push("FLAT:active age=" + str.tostring(not na(flat_start) ? bar_index - flat_start : 0))
     else if flat_diag_state == -3
         f_dbg_push("FLAT:skip bars<" + str.tostring(max_flat_bars))
-    else if flat_diag_state == -2
-        f_dbg_push("FLAT:block htf_prio=0")
     else if flat_diag_state == -1
         f_dbg_push("FLAT:block rng%=" + str.tostring(cand_rng_pct * 100.0, "#.##"))
     else if flat_diag_state == 0
@@ -510,7 +525,9 @@ if in_flat
 
     bool finalize = outside_early or outside_true or exit_confirm_cnt >= exit_confirm_bars or (bar_index - flat_start) > max_flat_bars
     if finalize
-        bool flat_valid = htf_priority_flat_ok and (touches_top + touches_bottom) >= min_touch_req and touches_top >= min_touches_side and touches_bottom >= min_touches_side
+        int flat_finalize_touch_total = touches_top + touches_bottom
+        bool flat_finalize_sides_ok = (touches_top >= min_touches_side and touches_bottom >= min_touches_side) or flat_finalize_touch_total >= flat_high_touch_req
+        bool flat_valid = flat_finalize_touch_total >= min_touch_req and flat_finalize_sides_ok
         if debug_mode and barstate.islast
             if not flat_valid
                 f_dbg_push("FLAT:invalid t=" + str.tostring(touches_top) + "/" + str.tostring(touches_bottom))
@@ -535,6 +552,7 @@ if in_flat
         last_flat_high := flat_high
         last_flat_low := flat_low
         last_flat_valid := flat_valid
+        last_flat_finalized_bar := bar_index
         in_flat := false
         flat_start := na
         flat_high := na
@@ -552,6 +570,7 @@ s_rng = s_hi - s_lo
 s_rng_pct = s_rng / math.max(s_lo, syminfo.mintick)
 s_vol_sum = math.sum(volume, stop_len)
 
+stop_volume_event := false
 if enable_stop_vol and not in_stop and bar_index >= stop_len
     bool rng_ok = s_rng_pct <= stop_max_range_pct and s_rng <= atr * stop_range_atr_mult
     bool density_ok = s_rng <= atr * stop_density_mult
@@ -578,6 +597,7 @@ if enable_stop_vol and not in_stop and bar_index >= stop_len
         stop_exit_cnt := 0
 
 if in_stop
+    stop_volume_event := true
     stop_out_early = high > stop_high * (1 + stop_break_early) or low < stop_low * (1 - stop_break_early)
     stop_out_any = close > stop_high or close < stop_low
     if stop_out_any and not stop_out_early
@@ -803,17 +823,25 @@ bool work_cross_dn = not na(working_level) and work_cross_dn_raw
 
 if enable_traps and not na(working_level)
     bool vol_break_ok = not trap_use_volume or volume > vol_ma * 1.2
-    bool htf_align_up = htf_trend_dir <= 0
-    bool htf_align_dn = htf_trend_dir >= 0
-    brk_up = close > working_level and close[1] <= working_level and vol_break_ok and htf_align_up
-    brk_dn = close < working_level and close[1] >= working_level and vol_break_ok and htf_align_dn
+    brk_up = close > working_level and close[1] <= working_level and vol_break_ok
+    brk_dn = close < working_level and close[1] >= working_level and vol_break_ok
     if brk_up
         last_break_bar := bar_index
         last_break_dir := "up"
     if brk_dn
         last_break_bar := bar_index
         last_break_dir := "down"
-int trap_diag_state = not enable_traps ? -4 : na(working_level) ? -3 : na(last_break_bar) ? -2 : (bar_index - last_break_bar) > trap_max_bars ? -1 : (trap_up or trap_down) ? 1 : 0
+trap_up = false
+trap_down = false
+int trap_flag = 0
+if not na(last_break_bar) and not na(working_level)
+    in_window = (bar_index - last_break_bar) <= trap_max_bars
+    bool vol_trap_ok = not trap_use_volume or volume < vol_ma * trap_vol_drop
+    trap_up := last_break_dir == "up" and in_window and close < working_level and vol_trap_ok
+    trap_down := last_break_dir == "down" and in_window and close > working_level and vol_trap_ok
+trap_flag := trap_up ? 1 : trap_down ? -1 : 0
+
+int trap_diag_state = not enable_traps ? -4 : na(working_level) ? -3 : na(last_break_bar) ? -2 : (bar_index - last_break_bar) > trap_max_bars ? -1 : trap_flag != 0 ? 1 : 0
 if debug_mode and barstate.islast and trap_diag_state != dbg_trap_state
     if trap_diag_state == -4
         f_dbg_push("TRAP:off enable=0")
@@ -829,20 +857,13 @@ if debug_mode and barstate.islast and trap_diag_state != dbg_trap_state
         f_dbg_push("TRAP:hit dir=" + last_break_dir)
     dbg_trap_state := trap_diag_state
 
-trap_up = false
-trap_down = false
-if not na(last_break_bar) and not na(working_level)
-    in_window = (bar_index - last_break_bar) <= trap_max_bars
-    bool vol_trap_ok = not trap_use_volume or volume < vol_ma * trap_vol_drop
-    trap_up := last_break_dir == "up" and in_window and close < working_level and vol_trap_ok
-    trap_down := last_break_dir == "down" and in_window and close > working_level and vol_trap_ok
-
 bool trap_up_icon = trap_up and (icon_cooldown == 0 or na(last_trap_up_icon_bar) or (bar_index - last_trap_up_icon_bar >= icon_cooldown))
 bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_icon_bar) or (bar_index - last_trap_down_icon_bar >= icon_cooldown))
 bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
 bool choch_icon = choch_true_evt and (icon_cooldown == 0 or na(last_choch_icon_bar) or (bar_index - last_choch_icon_bar >= icon_cooldown))
 
-bool choch_block = choch_active or (pp_need_retest and choch_pending_dir != 0 and pending_alive) or (choch_confirm_dir != 0 and confirm_alive)
+bool pp_block_buy = choch_active and (choch_kind == 1 or choch_kind == 2)
+bool pp_block_sell = choch_active and (choch_kind == 3 or choch_kind == 4)
 
 inner_buy = false
 inner_sell = false
@@ -869,22 +890,25 @@ bear_ok = not enable_filters or ((hidden_bear or classic_bear or macd_bear) and 
 float atr_ref = atr
 near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref * test_atr_frac : false
 bool htf_buy_priority = htf_trend_dir == 1
-buy_setup = not choch_block and work_cross_up and (htf_buy_priority or allow_counter) and bull_ok and near_level
 bool htf_sell_priority = htf_trend_dir == -1
-sell_setup = not choch_block and work_cross_dn and (htf_sell_priority or allow_counter) and bear_ok and near_level
+bool htf_neutral = htf_trend_dir == 0
+bool buy_dir_ok = htf_buy_priority or htf_neutral or allow_counter
+bool sell_dir_ok = htf_sell_priority or htf_neutral or allow_counter
+buy_setup = not pp_block_buy and work_cross_up and buy_dir_ok and bull_ok and near_level
+sell_setup = not pp_block_sell and work_cross_dn and sell_dir_ok and bear_ok and near_level
 
 open_buy = buy_setup
 open_sell = sell_setup
-int setup_diag_state = na(working_level) ? -6 : choch_block ? -5 : (not work_cross_up and not work_cross_dn) ? -4 : ((not htf_buy_priority and not htf_sell_priority) and not allow_counter) ? -3 : ((work_cross_up and not bull_ok) or (work_cross_dn and not bear_ok)) ? -2 : not near_level ? -1 : (buy_setup or sell_setup) ? 2 : 1
+int setup_diag_state = na(working_level) ? -6 : ((pp_block_buy and work_cross_up) or (pp_block_sell and work_cross_dn)) ? -5 : (not work_cross_up and not work_cross_dn) ? -4 : ((work_cross_up and not buy_dir_ok) or (work_cross_dn and not sell_dir_ok)) ? -3 : ((work_cross_up and not bull_ok) or (work_cross_dn and not bear_ok)) ? -2 : not near_level ? -1 : (buy_setup or sell_setup) ? 2 : 1
 if debug_mode and barstate.islast and setup_diag_state != dbg_setup_state
     if setup_diag_state == -6
         f_dbg_push("SETUP:block work_lvl=na")
     else if setup_diag_state == -5
-        f_dbg_push("SETUP:block pp_pending")
+        f_dbg_push("SETUP:block pp_counter")
     else if setup_diag_state == -4
         f_dbg_push("SETUP:block cross=0")
     else if setup_diag_state == -3
-        f_dbg_push("SETUP:block htf_trend=0")
+        f_dbg_push("SETUP:block htf_side")
     else if setup_diag_state == -2
         f_dbg_push("SETUP:block filter")
     else if setup_diag_state == -1
@@ -898,20 +922,20 @@ if debug_mode and barstate.islast and setup_diag_state != dbg_setup_state
 bool rr_ok_buy = true
 bool rr_ok_sell = true
 bool rr_mult_ok = true
-if rr_gate_enabled and (open_buy or open_sell)
+float rr_quality_buy = na
+float rr_quality_sell = na
+if buy_setup or sell_setup
     float st_buy = not na(last_flat_low) and last_flat_valid ? last_flat_low : close - atr
     float st_sell = not na(last_flat_high) and last_flat_valid ? last_flat_high : close + atr
     float risk_buy = math.abs(close - st_buy)
     float risk_sell = math.abs(close - st_sell)
-    float rr_main_candidate = rr_main_mult
-    float rr_ext_candidate = rr_ext_mult
-    rr_mult_ok := math.max(rr_main_candidate, rr_ext_candidate) >= rr_min
+    rr_quality_buy := risk_buy > 0 ? math.max(rr_main_mult, rr_ext_mult) : na
+    rr_quality_sell := risk_sell > 0 ? math.max(rr_main_mult, rr_ext_mult) : na
+    rr_mult_ok := math.max(rr_main_mult, rr_ext_mult) >= rr_min
     rr_ok_buy := risk_buy > 0 and rr_mult_ok
     rr_ok_sell := risk_sell > 0 and rr_mult_ok
-    open_buy := open_buy and rr_ok_buy
-    open_sell := open_sell and rr_ok_sell
-if debug_mode and barstate.islast and rr_gate_enabled and (buy_setup or sell_setup) and not (open_buy or open_sell)
-    f_dbg_push("RR:block mult_ok=" + str.tostring(rr_mult_ok ? 1 : 0))
+if debug_mode and barstate.islast and rr_gate_enabled and (buy_setup or sell_setup)
+    f_dbg_push("RR:qual pass=" + str.tostring((buy_setup and rr_ok_buy) or (sell_setup and rr_ok_sell) ? 1 : 0))
 
 if not position_active and (open_buy or open_sell)
     position_active := true
@@ -993,9 +1017,11 @@ if position_active
 // =========================
 // VISUALS
 // =========================
-bool flat_valid_now = in_flat and (not pp_enabled or htf_trend_dir_cache != 0) and (touches_top + touches_bottom >= math.max(min_touches, 4)) and touches_top >= min_touches_side and touches_bottom >= min_touches_side
+int flat_active_touch_total = touches_top + touches_bottom
+bool flat_active_sides_ok = (touches_top >= min_touches_side and touches_bottom >= min_touches_side) or flat_active_touch_total >= flat_high_touch_req
+bool flat_valid_now = in_flat and flat_active_touch_total >= min_touch_req and flat_active_sides_ok
 var box flatBox = na
-if not clean_mode and show_boxes and in_flat and not na(flat_start) and not na(flat_high) and not na(flat_low) and flat_valid_now
+if not clean_mode and show_boxes and in_flat and not na(flat_start) and not na(flat_high) and not na(flat_low)
     color flat_bg = htf_trend_dir == 1 ? skin_buy_fill : htf_trend_dir == -1 ? skin_sell_fill : skin_poc_fill
     flatBox := f_box(flatBox, flat_start, flat_high, bar_index, flat_low, flat_bg, skin_edge_col, skin_border_w)
 else
@@ -1005,9 +1031,14 @@ else
 
 var line wl = na
 var label wll = na
-if not clean_mode and show_working_lvl and not na(working_level)
+if show_working_lvl and not na(working_level)
     wl := f_line_styled(wl, bar_index - 100, working_level, bar_index, working_level, skin_working_line_col, skin_line_w, line.style_arrow_right)
-    wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, f_contrast_text(skin_poc_fill), skin_label_size)
+    if not clean_mode
+        wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, f_contrast_text(skin_poc_fill), skin_label_size)
+    else
+        if not na(wll)
+            f_del_label(wll)
+            wll := na
 else
     if not na(wl)
         f_del_line(wl)
@@ -1154,67 +1185,96 @@ else if barstate.islast
 float debug_flat_mid = (in_flat and not na(flat_high) and not na(flat_low)) ? (flat_high + flat_low) / 2.0 : na
 int debug_pp_state = choch_active ? choch_kind : choch_confirm_dir != 0 and confirm_alive ? choch_confirm_kind : choch_pending_dir != 0 and pending_alive ? choch_pending_kind : 0
 int debug_rr_gate_state = (open_buy or open_sell) ? 1 : 0
-int debug_flat_valid_state = last_flat_valid ? 1 : 0
+float debug_rr_quality = buy_setup ? rr_quality_buy : sell_setup ? rr_quality_sell : na
+int debug_flat_valid_state = flat_valid_now ? 1 : last_flat_valid ? 1 : 0
+int debug_flat_state_code = in_flat ? 1 : (not na(last_flat_finalized_bar) and bar_index - last_flat_finalized_bar <= 1 ? 2 : 0)
+float debug_flat_hi = in_flat ? flat_high : last_flat_high
+float debug_flat_lo = in_flat ? flat_low : last_flat_low
 float debug_poc_level = working_level
-int debug_trap_flags = trap_up ? 1 : trap_down ? -1 : 0
+int debug_trap_flags = trap_flag
 float debug_rr_main_mult = rr_main_mult
 float debug_rr_ext_mult = rr_ext_mult
 int debug_pp_pending = choch_pending_dir != 0 and pending_alive ? 1 : 0
+int debug_pp_pending_dir = choch_pending_dir
 int debug_pp_confirm = choch_confirm_dir != 0 and confirm_alive ? 1 : 0
 int debug_pp_pending_left = debug_pp_pending == 1 and not na(choch_pending_bar) ? math.max(pp_retest_bars - (bar_index - choch_pending_bar), 0) : 0
 int debug_pp_confirm_left = debug_pp_confirm == 1 and not na(choch_confirm_bar) ? math.max(pp_retest_bars - (bar_index - choch_confirm_bar), 0) : 0
 float debug_last_pivot_high = htf_last_hh
 float debug_last_pivot_low = htf_last_ll
+float debug_prev_pivot_high = array.size(htf_highs) >= 2 ? array.get(htf_highs, array.size(htf_highs) - 2) : na
+float debug_prev_pivot_low = array.size(htf_lows) >= 2 ? array.get(htf_lows, array.size(htf_lows) - 2) : na
 int debug_htf_trend_dir = htf_trend_dir
 float debug_flat_age = in_flat and not na(flat_start) ? bar_index - flat_start : na
 float debug_flat_rng_atr = in_flat and not na(flat_high) and not na(flat_low) and atr > 0 ? (flat_high - flat_low) / atr : na
 float debug_risk = position_active and not na(entry_price) and not na(stop_price) ? math.abs(entry_price - stop_price) : na
+bool debug_break_detected = not na(last_break_bar)
+bool debug_trap_window = debug_break_detected and (bar_index - last_break_bar) <= trap_max_bars
+bool debug_trap_vol_pass = not trap_use_volume or volume < vol_ma * trap_vol_drop
+int debug_active_poc_count = 0
+if array.size(poc_prices) > 0
+    for i = 0 to array.size(poc_prices) - 1
+        if array.get(poc_tests, i) < poc_dead_tests
+            debug_active_poc_count += 1
+int debug_working_tests = na
+if not na(working_level) and array.size(poc_prices) > 0
+    for i = 0 to array.size(poc_prices) - 1
+        if array.get(poc_prices, i) == working_level
+            debug_working_tests := array.get(poc_tests, i)
+            break
 string debug_pp_state_text = choch_active ? "active" : choch_confirm_dir != 0 and confirm_alive ? "pending_confirm" : choch_pending_dir != 0 and pending_alive ? "pending_retest" : "idle"
 string debug_diag_last = f_dbg_last(DBG_SHOW_LAST)
 
 if debug_mode and show_debug_table and barstate.islast
     if na(debug_table)
-        debug_table := table.new(position.top_right, 2, 20, border_width=1)
-    table.cell(debug_table, 0, 0, "htf_trend_dir")
-    table.cell(debug_table, 1, 0, str.tostring(debug_htf_trend_dir))
-    table.cell(debug_table, 0, 1, "flat cand/valid")
-    table.cell(debug_table, 1, 1, str.tostring(cand_ok ? 1 : 0) + "/" + str.tostring(debug_flat_valid_state))
-    table.cell(debug_table, 0, 2, "flat age touch")
-    table.cell(debug_table, 1, 2, str.tostring(debug_flat_age) + " | " + str.tostring(touches_top) + "/" + str.tostring(touches_bottom))
-    table.cell(debug_table, 0, 3, "flat rng%/atr")
-    table.cell(debug_table, 1, 3, str.tostring(cand_rng_pct * 100.0, "#.##") + "/" + str.tostring(debug_flat_rng_atr, "#.##"))
-    table.cell(debug_table, 0, 4, "poc count/work")
-    table.cell(debug_table, 1, 4, str.tostring(array.size(poc_prices)) + " / " + str.tostring(working_level, format.mintick))
-    table.cell(debug_table, 0, 5, "poc last/dead")
-    table.cell(debug_table, 1, 5, str.tostring(debug_poc_level, format.mintick) + " / " + str.tostring(poc_dead_tests))
-    table.cell(debug_table, 0, 6, "stop in/price")
-    table.cell(debug_table, 1, 6, str.tostring(in_stop ? 1 : 0) + " / " + str.tostring(stop_price, format.mintick))
-    table.cell(debug_table, 0, 7, "trap flags")
-    table.cell(debug_table, 1, 7, str.tostring(trap_up ? 1 : 0) + "/" + str.tostring(trap_down ? 1 : 0))
-    table.cell(debug_table, 0, 8, "pp state")
-    table.cell(debug_table, 1, 8, debug_pp_state_text + "(" + str.tostring(debug_pp_state) + ")")
-    table.cell(debug_table, 0, 9, "pp pending/confirm")
-    table.cell(debug_table, 1, 9, str.tostring(debug_pp_pending) + "(" + str.tostring(debug_pp_pending_left) + ") " + str.tostring(debug_pp_confirm) + "(" + str.tostring(debug_pp_confirm_left) + ")")
-    table.cell(debug_table, 0, 10, "pp confirm_cnt")
-    table.cell(debug_table, 1, 10, str.tostring(choch_confirm_count))
-    table.cell(debug_table, 0, 11, "rr risk")
-    table.cell(debug_table, 1, 11, str.tostring(debug_risk, format.mintick))
-    table.cell(debug_table, 0, 12, "rr mult main/ext")
-    table.cell(debug_table, 1, 12, str.tostring(debug_rr_main_mult, "#.###") + "/" + str.tostring(debug_rr_ext_mult, "#.###"))
-    table.cell(debug_table, 0, 13, "rr gate")
-    table.cell(debug_table, 1, 13, str.tostring(debug_rr_gate_state))
-    table.cell(debug_table, 0, 14, "setup raw/final")
-    table.cell(debug_table, 1, 14, str.tostring(buy_setup or sell_setup ? 1 : 0) + "/" + str.tostring(open_buy or open_sell ? 1 : 0))
-    table.cell(debug_table, 0, 15, "cross up/dn")
-    table.cell(debug_table, 1, 15, str.tostring(work_cross_up ? 1 : 0) + "/" + str.tostring(work_cross_dn ? 1 : 0))
-    table.cell(debug_table, 0, 16, "near_level")
-    table.cell(debug_table, 1, 16, str.tostring(near_level ? 1 : 0))
-    table.cell(debug_table, 0, 17, "in_flat/in_stop")
-    table.cell(debug_table, 1, 17, str.tostring(in_flat ? 1 : 0) + "/" + str.tostring(in_stop ? 1 : 0))
-    table.cell(debug_table, 0, 18, "pivot_h/pivot_l")
-    table.cell(debug_table, 1, 18, str.tostring(debug_last_pivot_high, format.mintick) + "/" + str.tostring(debug_last_pivot_low, format.mintick))
-    table.cell(debug_table, 0, 19, "diag last")
-    table.cell(debug_table, 1, 19, debug_diag_last)
+        debug_table := table.new(position.top_right, 2, 24, border_width=1)
+    table.cell(debug_table, 0, 0, "flat state/final")
+    table.cell(debug_table, 1, 0, str.tostring(debug_flat_state_code) + " / " + str.tostring(last_flat_finalized_bar))
+    table.cell(debug_table, 0, 1, "flat hi/lo")
+    table.cell(debug_table, 1, 1, str.tostring(debug_flat_hi, format.mintick) + " / " + str.tostring(debug_flat_lo, format.mintick))
+    table.cell(debug_table, 0, 2, "flat touch/exit")
+    table.cell(debug_table, 1, 2, str.tostring(touches_top) + "/" + str.tostring(touches_bottom) + " ec=" + str.tostring(exit_confirm_cnt))
+    table.cell(debug_table, 0, 3, "flat cand/valid")
+    table.cell(debug_table, 1, 3, str.tostring(cand_ok ? 1 : 0) + "/" + str.tostring(debug_flat_valid_state))
+    table.cell(debug_table, 0, 4, "poc last/work")
+    table.cell(debug_table, 1, 4, str.tostring(debug_poc_level, format.mintick) + " / " + str.tostring(working_level, format.mintick))
+    table.cell(debug_table, 0, 5, "poc tests/active")
+    table.cell(debug_table, 1, 5, str.tostring(debug_working_tests) + " / " + str.tostring(debug_active_poc_count))
+    table.cell(debug_table, 0, 6, "sv event/level")
+    table.cell(debug_table, 1, 6, str.tostring(stop_volume_event ? 1 : 0) + " / " + str.tostring(in_stop ? stop_high : na, format.mintick))
+    table.cell(debug_table, 0, 7, "trap flag")
+    table.cell(debug_table, 1, 7, str.tostring(debug_trap_flags))
+    table.cell(debug_table, 0, 8, "trap break/window")
+    table.cell(debug_table, 1, 8, str.tostring(debug_break_detected ? 1 : 0) + " / " + str.tostring(debug_trap_window ? 1 : 0))
+    table.cell(debug_table, 0, 9, "trap vol_gate")
+    table.cell(debug_table, 1, 9, str.tostring(debug_trap_vol_pass ? 1 : 0))
+    table.cell(debug_table, 0, 10, "pp state")
+    table.cell(debug_table, 1, 10, debug_pp_state_text + "(" + str.tostring(debug_pp_state) + ")")
+    table.cell(debug_table, 0, 11, "pp pending/dir")
+    table.cell(debug_table, 1, 11, str.tostring(debug_pp_pending) + " dir=" + str.tostring(debug_pp_pending_dir))
+    table.cell(debug_table, 0, 12, "pp confirm cnt")
+    table.cell(debug_table, 1, 12, str.tostring(debug_pp_confirm) + " / " + str.tostring(choch_confirm_count))
+    table.cell(debug_table, 0, 13, "htf dir")
+    table.cell(debug_table, 1, 13, str.tostring(debug_htf_trend_dir))
+    table.cell(debug_table, 0, 14, "htf pivots prev")
+    table.cell(debug_table, 1, 14, str.tostring(debug_prev_pivot_high, format.mintick) + " / " + str.tostring(debug_prev_pivot_low, format.mintick))
+    table.cell(debug_table, 0, 15, "htf pivots last")
+    table.cell(debug_table, 1, 15, str.tostring(debug_last_pivot_high, format.mintick) + " / " + str.tostring(debug_last_pivot_low, format.mintick))
+    table.cell(debug_table, 0, 16, "rr gate/qual")
+    table.cell(debug_table, 1, 16, str.tostring(debug_rr_gate_state) + " / " + str.tostring(debug_rr_quality, "#.###"))
+    table.cell(debug_table, 0, 17, "rr keep req/eff")
+    table.cell(debug_table, 1, 17, str.tostring(rr_keep_requested) + " / " + str.tostring(internal_rr_keep))
+    table.cell(debug_table, 0, 18, "rr keep box/ln/lb")
+    table.cell(debug_table, 1, 18, str.tostring(rr_keep_by_boxes) + "/" + str.tostring(rr_keep_by_lines) + "/" + str.tostring(rr_keep_by_labels))
+    table.cell(debug_table, 0, 19, "setup raw/final")
+    table.cell(debug_table, 1, 19, str.tostring(buy_setup or sell_setup ? 1 : 0) + "/" + str.tostring(open_buy or open_sell ? 1 : 0))
+    table.cell(debug_table, 0, 20, "cross up/dn")
+    table.cell(debug_table, 1, 20, str.tostring(work_cross_up ? 1 : 0) + "/" + str.tostring(work_cross_dn ? 1 : 0))
+    table.cell(debug_table, 0, 21, "near/in_flat")
+    table.cell(debug_table, 1, 21, str.tostring(near_level ? 1 : 0) + " / " + str.tostring(in_flat ? 1 : 0))
+    table.cell(debug_table, 0, 22, "flat rng%/atr")
+    table.cell(debug_table, 1, 22, str.tostring(cand_rng_pct * 100.0, "#.##") + "/" + str.tostring(debug_flat_rng_atr, "#.##"))
+    table.cell(debug_table, 0, 23, "diag last")
+    table.cell(debug_table, 1, 23, debug_diag_last)
 else
     if not na(debug_table)
         table.delete(debug_table)
@@ -1222,7 +1282,7 @@ else
 
 if debug_mode and barstate.islast
     string dbg_text = "DBG htf=" + str.tostring(debug_htf_trend_dir) + " flat=" + str.tostring(in_flat ? 1 : 0) + " poc=" + str.tostring(array.size(poc_prices)) + "\n" +
-      "pp=" + debug_pp_state_text + " rr=" + str.tostring(open_buy or open_sell ? 1 : 0) + " trap=" + str.tostring(debug_trap_flags) + "\n" +
+      "pp=" + debug_pp_state_text + " rr=" + str.tostring(open_buy or open_sell ? 1 : 0) + "/" + str.tostring(debug_rr_quality, "#.##") + " trap=" + str.tostring(debug_trap_flags) + "\n" +
       f_dbg_last(4)
     float dbg_y = high + atr * 0.35
     color dbg_bg = color.new(skin_poc_fill, 40)
@@ -1233,11 +1293,21 @@ else
         dbg_lbl := na
 
 plot(debug_mode ? debug_flat_mid : na, "DBG Flat Mid", color=skin_working_line_col, linewidth=1, style=plot.style_line)
+plot(debug_mode ? (flat_valid_now ? 1 : 0) : na, "DBG Flat Detected", color=skin_poc_line, linewidth=1, style=plot.style_columns)
 plot(debug_mode ? debug_poc_level : na, "DBG POC Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
 plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
 plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_stepline)
-plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flags", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
+plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_stepline)
+plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flag", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
+plot(debug_mode ? debug_rr_quality : na, "DBG RR Quality", color=skin_take_fill, linewidth=1, style=plot.style_line)
 plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns)
+plot(debug_mode ? debug_flat_state_code : na, "DBG Flat State Code", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
+plot(debug_mode ? debug_working_tests : na, "DBG POC Working Tests", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
+plot(debug_mode ? (stop_volume_event ? 1 : 0) : na, "DBG SV Event", color=skin_stop_line_col, linewidth=1, style=plot.style_columns, display=display.none)
+plot(debug_mode ? (debug_break_detected ? 1 : 0) : na, "DBG Trap Break", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none)
+plot(debug_mode ? (debug_trap_window ? 1 : 0) : na, "DBG Trap Window", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none)
+plot(debug_mode ? (debug_trap_vol_pass ? 1 : 0) : na, "DBG Trap Vol Gate", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none)
+plot(debug_mode ? debug_pp_pending_dir : na, "DBG PP Pending Dir", color=skin_choch_col, linewidth=1, style=plot.style_stepline, display=display.none)
 
 // =========================
 // ALERTS

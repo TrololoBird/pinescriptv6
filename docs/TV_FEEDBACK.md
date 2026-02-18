@@ -59,3 +59,46 @@
   - Note latest "diag last" lines from debug table (last gating reasons).
 - Then rerun with `debug_mode=false` and append screenshots/notes if visuals still look sparse.
 - Keep all new entries append-only in this file with UTC timestamps.
+
+## 2026-02-18 20:00:00Z — Template for next user TV run (append-only)
+- Symbol:
+- Timeframe:
+- Debug mode: (`true` / `false`)
+
+### Compiler output (raw, verbatim)
+- 
+
+### Runtime warnings (raw, verbatim)
+- 
+
+### Debug table snapshot (key rows)
+- flat state/final:
+- flat hi/lo:
+- flat touch/exit:
+- poc tests/active:
+- sv event/level:
+- trap flag:
+- trap break/window:
+- trap vol_gate:
+- pp state:
+- pp pending/dir:
+- pp confirm cnt:
+- htf dir:
+- htf pivots prev:
+- htf pivots last:
+- rr gate/qual:
+- rr keep req/eff:
+- rr keep box/ln/lb:
+- setup raw/final:
+- diag last:
+
+### Visual notes (vs COURSE_LOGIC_SPEC)
+- flat visibility:
+- working level visibility:
+- PP markers:
+- trap markers:
+- RR overlays:
+
+### Screenshots/links
+- debug on:
+- debug off:
