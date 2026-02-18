@@ -102,3 +102,24 @@
 ### Screenshots/links
 - debug on:
 - debug off:
+
+## 2026-02-18 23:31:23Z — Codex strict-compat pass (awaiting user TV validation)
+- TradingView actions remain user-owned per `docs/TV_COMPILE_LOOP.md`.
+- Export used for this pass: `make tv-export`.
+
+### User TV rerun checklist (append raw outputs below)
+- Symbols/timeframes to validate (minimum):
+  - BTCUSDT 15m
+  - BTCUSDT 1h
+  - AAPL 1D
+- For each chart provide:
+  - Raw Pine compiler output (verbatim, including line/column text).
+  - Raw runtime warnings (verbatim).
+  - Screenshots with `debug_mode=true` + `show_debug_table=true`.
+  - Screenshots with `debug_mode=false` (clean visual pass).
+- Extra focus checks for this pass:
+  - Working level picks nearest active POC to price.
+  - Trap break registration respects HTF alignment.
+  - PP pending/confirm/active blocks both BUY and SELL setups.
+  - Level zone is visible around working level (thinner in clean mode).
+  - RR history and open RR overlays remain present without object-limit warnings.

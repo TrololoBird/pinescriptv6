@@ -51,20 +51,16 @@ group_traps = "Ловушки"
 trap_max_bars = input.int(8, "Окно ловушки", minval=2, maxval=50, group=group_traps)
 trap_vol_drop = input.float(0.75, "Падение объёма от MA *", step=0.05, minval=0.1, maxval=2.0, group=group_traps)
 trap_use_volume = input.bool(false, "Использовать фильтр объёма", group=group_traps)
-trap_need_tf_mismatch = input.bool(true, "Trap: нужен TF mismatch", group=group_traps)
 icon_cooldown = input.int(0, "Icon cooldown", minval=0, maxval=200, group=group_traps)
 
 group_choch = "PP"
 htf              = input.timeframe("240", "HTF", group=group_choch)
-stf              = input.timeframe("D", "STF direction TF", group=group_choch)
 choch_pivot_len  = input.int(10, "Pivot length", minval=2, maxval=50, group=group_choch)
 choch_pivot_cap  = input.int(10, "Pivot cap", minval=2, maxval=200, group=group_choch)
 choch_break_early = input.float(0.5, "PP EARLY (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
 choch_break_true  = input.float(1.0, "PP TRUE (%)", step=0.1, minval=0.1, maxval=5, group=group_choch) / 100
 choch_need_retest = input.bool(true, "PP need retest", group=group_choch)
 choch_retest_bars = input.int(3, "PP retest bars", minval=1, maxval=20, group=group_choch)
-pp_confirm_bars = input.int(2, "PP confirm bars", minval=1, maxval=5, group=group_choch)
-pp_confirm_vol_mult = input.float(1.1, "PP volume >= MA *", step=0.05, minval=0.5, maxval=3.0, group=group_choch)
 
 // PP aliases over legacy choch_* runtime variables
 pp_enabled = enable_choch
@@ -87,7 +83,12 @@ rr_gate_enabled    = input.bool(true, "RR gate", group=group_setups)
 rr_min             = input.float(3.0, "Min RR", step=0.1, minval=0.5, maxval=10, group=group_setups)
 rr_main_mult       = input.float(1.618, "Main TP mult", step=0.001, minval=0.1, maxval=10, group=group_setups)
 rr_ext_mult        = input.float(2.618, "Ext TP mult", step=0.001, minval=0.1, maxval=20, group=group_setups)
-sl_min_atr_mult    = input.float(1.5, "Min SL ATR mult", step=0.1, minval=0.5, maxval=5.0, group=group_setups)
+
+const bool TRAP_NEED_TF_MISMATCH = true
+const string STF_TF = "D"
+const int PP_CONFIRM_BARS = 2
+const float PP_CONFIRM_VOL_MULT = 1.1
+const float SL_MIN_ATR_MULT = 1.5
 
 
 group_vis = "Визуализация"
@@ -204,7 +205,7 @@ f_line(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w) =>
         line.set_width(out, _w)
     out
 
-f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, string _lineStyle) =>
+f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, _lineStyle) =>
     line out = _ln
     int x1 = f_bar_time_from_index(_x1)
     int x2 = f_bar_time_from_index(_x2)
@@ -218,7 +219,7 @@ f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w
         line.set_style(out, _lineStyle)
     out
 
-f_label(label _lb, int _x, float _y, string _txt, string _labelStyle, color _bg, color _tc, string _labelSize) =>
+f_label(label _lb, int _x, float _y, string _txt, _labelStyle, color _bg, color _tc, _labelSize) =>
     label out = _lb
     int x = f_bar_time_from_index(_x)
     if na(out)
@@ -695,7 +696,7 @@ if htf_ready
     htf_trend_dir := htf_trend_up and not htf_trend_down ? 1 : htf_trend_down and not htf_trend_up ? -1 : 0
 htf_trend_dir_cache := htf_trend_dir
 
-[stf_ph_raw, stf_pl_raw] = request.security(syminfo.tickerid, stf, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=math.max(500, choch_pivot_cap * (choch_pivot_len * 2 + 10)))
+[stf_ph_raw, stf_pl_raw] = request.security(syminfo.tickerid, STF_TF, [ta.pivothigh(high, choch_pivot_len, choch_pivot_len), ta.pivotlow(low, choch_pivot_len, choch_pivot_len)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off, calc_bars_count=math.max(500, choch_pivot_cap * (choch_pivot_len * 2 + 10)))
 float stf_ph = na(stf_ph_raw) ? na : stf_ph_raw
 float stf_pl = na(stf_pl_raw) ? na : stf_pl_raw
 var array<float> stf_highs = array.new_float()
@@ -751,7 +752,8 @@ if pp_enabled and htf_ready
     float break_level = break_kind == 2 ? htf_last_ll : break_kind == 4 ? htf_last_hh : break_kind == 1 ? pp_early_dn_level : break_kind == 3 ? pp_early_up_level : na
 
     if break_kind != 0 and choch_pending_dir == 0 and choch_confirm_dir == 0
-        if pp_need_retest
+        bool break_needs_retest = pp_need_retest and (break_kind == 2 or break_kind == 4)
+        if break_needs_retest
             choch_pending_dir := break_dir
             choch_pending_kind := break_kind
             choch_pending_level := break_level
@@ -787,10 +789,10 @@ if pp_enabled and htf_ready
         float confirm_thr = choch_confirm_kind == 2 or choch_confirm_kind == 4 ? pp_break_true : pp_break_early
         float confirm_level = choch_confirm_dir == -1 ? choch_confirm_level * (1 - confirm_thr) : choch_confirm_level * (1 + confirm_thr)
         bool confirm_bar_ok = choch_confirm_dir == -1 ? close < confirm_level : close > confirm_level
-        bool confirm_vol_ok = volume >= vol_ma * pp_confirm_vol_mult
+        bool confirm_vol_ok = volume >= vol_ma * PP_CONFIRM_VOL_MULT
         bool confirm_final_ok = confirm_bar_ok and confirm_vol_ok
         choch_confirm_count := confirm_final_ok ? choch_confirm_count + 1 : 0
-        if choch_confirm_count >= pp_confirm_bars
+        if choch_confirm_count >= PP_CONFIRM_BARS
             choch_active := true
             choch_kind := choch_confirm_kind
             choch_confirm_dir := 0
@@ -858,12 +860,15 @@ if debug_mode and barstate.islast and poc_diag_state != dbg_poc_state
     dbg_poc_state := poc_diag_state
 
 float working_level = na
+float working_level_dist = na
 if array.size(poc_prices) > 0
-    for j = 0 to array.size(poc_prices) - 1
-        i = array.size(poc_prices) - 1 - j
+    for i = 0 to array.size(poc_prices) - 1
         if array.get(poc_tests, i) < poc_dead_tests
-            working_level := array.get(poc_prices, i)
-            break
+            float lvl = array.get(poc_prices, i)
+            float lvl_dist = math.abs(close - lvl)
+            if na(working_level_dist) or lvl_dist < working_level_dist
+                working_level := lvl
+                working_level_dist := lvl_dist
 if debug_mode and barstate.islast and na(working_level)
     f_dbg_push("POC:block no_active_poc")
 
@@ -874,8 +879,10 @@ bool work_cross_dn = not na(working_level) and work_cross_dn_raw
 
 if enable_traps and not na(working_level)
     bool vol_break_ok = not trap_use_volume or volume > vol_ma * 1.2
-    brk_up = close > working_level and close[1] <= working_level and vol_break_ok
-    brk_dn = close < working_level and close[1] >= working_level and vol_break_ok
+    bool htf_align_up = htf_trend_dir <= 0
+    bool htf_align_down = htf_trend_dir >= 0
+    brk_up = work_cross_up and vol_break_ok and htf_align_up
+    brk_dn = work_cross_dn and vol_break_ok and htf_align_down
     if brk_up
         last_break_bar := bar_index
         last_break_dir := "up"
@@ -887,8 +894,8 @@ bool trap_down = false
 int trap_flag = 0
 bool tf_mismatch_up = htf_trend_dir == -1 or stf_trend_dir == -1
 bool tf_mismatch_down = htf_trend_dir == 1 or stf_trend_dir == 1
-bool trap_tf_ok_up = not trap_need_tf_mismatch or tf_mismatch_up
-bool trap_tf_ok_down = not trap_need_tf_mismatch or tf_mismatch_down
+bool trap_tf_ok_up = not TRAP_NEED_TF_MISMATCH or tf_mismatch_up
+bool trap_tf_ok_down = not TRAP_NEED_TF_MISMATCH or tf_mismatch_down
 if not na(last_break_bar) and not na(working_level)
     in_window = (bar_index - last_break_bar) <= trap_max_bars
     bool vol_trap_ok = not trap_use_volume or volume < vol_ma * trap_vol_drop
@@ -917,8 +924,9 @@ bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_ico
 bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
 bool choch_icon = choch_true_evt and (icon_cooldown == 0 or na(last_choch_icon_bar) or (bar_index - last_choch_icon_bar >= icon_cooldown))
 
-bool pp_block_buy = choch_active and (choch_kind == 1 or choch_kind == 2)
-bool pp_block_sell = choch_active and (choch_kind == 3 or choch_kind == 4)
+bool pp_block_all = choch_active or pending_alive or confirm_alive
+bool pp_block_buy = pp_block_all
+bool pp_block_sell = pp_block_all
 
 inner_buy = false
 inner_sell = false
@@ -984,14 +992,18 @@ float rr_quality_sell = na
 if buy_setup or sell_setup
     float en_buy = not na(working_level) ? working_level : close
     float en_sell = not na(working_level) ? working_level : close
-    float st_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : en_buy - atr * sl_min_atr_mult
-    float st_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : en_sell + atr * sl_min_atr_mult
-    float st_buy = math.min(st_buy_raw, en_buy - atr * sl_min_atr_mult)
-    float st_sell = math.max(st_sell_raw, en_sell + atr * sl_min_atr_mult)
+    float st_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : en_buy - atr * SL_MIN_ATR_MULT
+    float st_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : en_sell + atr * SL_MIN_ATR_MULT
+    float st_buy = math.min(st_buy_raw, en_buy - atr * SL_MIN_ATR_MULT)
+    float st_sell = math.max(st_sell_raw, en_sell + atr * SL_MIN_ATR_MULT)
     float risk_buy = math.abs(en_buy - st_buy)
     float risk_sell = math.abs(en_sell - st_sell)
-    rr_quality_buy := risk_buy > 0 ? math.max(rr_main_mult, rr_ext_mult) : na
-    rr_quality_sell := risk_sell > 0 ? math.max(rr_main_mult, rr_ext_mult) : na
+    float tp_main_buy = en_buy + risk_buy * rr_main_mult
+    float tp_ext_buy = en_buy + risk_buy * rr_ext_mult
+    float tp_main_sell = en_sell - risk_sell * rr_main_mult
+    float tp_ext_sell = en_sell - risk_sell * rr_ext_mult
+    rr_quality_buy := risk_buy > 0 ? math.max(math.abs(tp_main_buy - en_buy), math.abs(tp_ext_buy - en_buy)) / risk_buy : na
+    rr_quality_sell := risk_sell > 0 ? math.max(math.abs(en_sell - tp_main_sell), math.abs(en_sell - tp_ext_sell)) / risk_sell : na
     rr_mult_ok := math.max(rr_main_mult, rr_ext_mult) >= rr_min
     rr_ok_buy := risk_buy > 0 and rr_mult_ok
     rr_ok_sell := risk_sell > 0 and rr_mult_ok
@@ -1002,9 +1014,9 @@ if not position_active and (open_buy or open_sell)
     position_active := true
     position_dir := open_buy ? "BUY" : "SELL"
     entry_price := not na(working_level) ? working_level : close
-    float stop_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : entry_price - atr * sl_min_atr_mult
-    float stop_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : entry_price + atr * sl_min_atr_mult
-    stop_price := position_dir == "BUY" ? math.min(stop_buy_raw, entry_price - atr * sl_min_atr_mult) : math.max(stop_sell_raw, entry_price + atr * sl_min_atr_mult)
+    float stop_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : entry_price - atr * SL_MIN_ATR_MULT
+    float stop_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : entry_price + atr * SL_MIN_ATR_MULT
+    stop_price := position_dir == "BUY" ? math.min(stop_buy_raw, entry_price - atr * SL_MIN_ATR_MULT) : math.max(stop_sell_raw, entry_price + atr * SL_MIN_ATR_MULT)
     float risk = math.abs(entry_price - stop_price)
     tp_main := position_dir == "BUY" ? entry_price + risk * rr_main_mult : entry_price - risk * rr_main_mult
     tp_ext := position_dir == "BUY" ? entry_price + risk * rr_ext_mult : entry_price - risk * rr_ext_mult
@@ -1094,8 +1106,12 @@ else
 
 var line wl = na
 var label wll = na
+var box wl_zone = na
 if show_working_lvl and not na(working_level)
     wl := f_line_styled(wl, bar_index - 100, working_level, bar_index, working_level, skin_working_line_col, skin_line_w, line.style_arrow_right)
+    float zone_half = math.max(math.abs(working_level) * poc_test_tolerance, atr * 0.10)
+    color zone_bg = clean_mode ? color.new(skin_working_line_col, 94) : color.new(skin_working_line_col, 88)
+    wl_zone := f_box_norm(wl_zone, bar_index - 100, working_level + zone_half, bar_index, working_level - zone_half, zone_bg, color.new(skin_working_line_col, 75), 1)
     if not clean_mode
         wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, f_contrast_text(skin_poc_fill), skin_label_size)
     else
@@ -1109,9 +1125,12 @@ else
     if not na(wll)
         f_del_label(wll)
         wll := na
+    if not na(wl_zone)
+        f_del_box(wl_zone)
+        wl_zone := na
 
 var array<line> poc_lines = array.new_line()
-if not clean_mode and show_poc_lines and enable_poc
+if show_poc_lines and enable_poc
     while array.size(poc_lines) < array.size(poc_prices)
         array.push(poc_lines, na)
     while array.size(poc_lines) > array.size(poc_prices)
@@ -1193,7 +1212,7 @@ var array<box> rr_hist_take_boxes = array.new_box()
 var array<box> rr_hist_take2_boxes = array.new_box()
 var array<line> rr_hist_entry_lines = array.new_line()
 var array<label> rr_hist_stat_labels = array.new_label()
-if show_rr_history and not clean_mode and barstate.islast
+if show_rr_history and barstate.islast
     int n = array.size(log_dir)
     while array.size(rr_hist_stop_boxes) < n
         array.push(rr_hist_stop_boxes, na)
