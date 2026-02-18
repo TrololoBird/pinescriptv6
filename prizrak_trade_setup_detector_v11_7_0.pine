@@ -141,10 +141,10 @@ skin_line_w = line_w_eff
 skin_dead_line_w = 1
 skin_border_w = border_w_eff
 
-trap_up_style = label.style_arrowup
-trap_dn_style = label.style_arrowdown
-choch_up_style = label.style_arrowup
-choch_dn_style = label.style_arrowdown
+int trap_up_style = label.style_arrowup
+int trap_dn_style = label.style_arrowdown
+int choch_up_style = label.style_arrowup
+int choch_dn_style = label.style_arrowdown
 
 rr_cStop    = skin_stop_fill
 rr_cTake    = skin_take_fill
@@ -185,7 +185,7 @@ f_line(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w) =>
         line.set_width(out, _w)
     out
 
-f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, string _st) =>
+f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, int _st) =>
     line out = _ln
     if na(out)
         out := line.new(_x1, _y1, _x2, _y2, color=_c, width=_w, style=_st)
@@ -197,7 +197,7 @@ f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w
         line.set_style(out, _st)
     out
 
-f_label(label _lb, int _x, float _y, string _txt, int _style, color _bg, color _tc, string _sz) =>
+f_label(label _lb, int _x, float _y, string _txt, int _style, color _bg, color _tc, int _sz) =>
     label out = _lb
     if na(out)
         out := label.new(_x, _y, _txt, style=_style, color=_bg, textcolor=_tc, size=_sz)
@@ -928,12 +928,7 @@ var line rr_open_entry_line = na
 var label rr_open_stat_label = na
 if rr_draw_open and open_active and not clean_mode
     int rr_right = bar_index + rr_open_extend
-    [_rr_open_stop_box, _rr_open_take_box, _rr_open_take2_box, _rr_open_entry_line, _rr_open_stat_label] = f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
-    rr_open_stop_box := _rr_open_stop_box
-    rr_open_take_box := _rr_open_take_box
-    rr_open_take2_box := _rr_open_take2_box
-    rr_open_entry_line := _rr_open_entry_line
-    rr_open_stat_label := _rr_open_stat_label
+    [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] = f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
 else
     if not na(rr_open_stop_box)
         f_del_box(rr_open_stop_box)
@@ -980,17 +975,17 @@ if show_rr_history and not clean_mode and barstate.islast
             float tm = array.get(log_takeMain, i)
             float te = array.get(log_takeExt, i)
             string rs = array.get(log_res, i)
-            box sb = array.get(rr_hist_stop_boxes, i)
-            box tb = array.get(rr_hist_take_boxes, i)
-            box t2 = array.get(rr_hist_take2_boxes, i)
-            line el = array.get(rr_hist_entry_lines, i)
-            label slb = array.get(rr_hist_stat_labels, i)
-            [_sb, _tb, _t2, _el, _slb] = f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, sb, tb, t2, el, slb, rr_show_stat)
-            array.set(rr_hist_stop_boxes, i, _sb)
-            array.set(rr_hist_take_boxes, i, _tb)
-            array.set(rr_hist_take2_boxes, i, _t2)
-            array.set(rr_hist_entry_lines, i, _el)
-            array.set(rr_hist_stat_labels, i, _slb)
+            box rrh_sb = array.get(rr_hist_stop_boxes, i)
+            box rrh_tb = array.get(rr_hist_take_boxes, i)
+            box rrh_t2 = array.get(rr_hist_take2_boxes, i)
+            line rrh_el = array.get(rr_hist_entry_lines, i)
+            label rrh_slb = array.get(rr_hist_stat_labels, i)
+            [rrh_sb, rrh_tb, rrh_t2, rrh_el, rrh_slb] = f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, rrh_sb, rrh_tb, rrh_t2, rrh_el, rrh_slb, rr_show_stat)
+            array.set(rr_hist_stop_boxes, i, rrh_sb)
+            array.set(rr_hist_take_boxes, i, rrh_tb)
+            array.set(rr_hist_take2_boxes, i, rrh_t2)
+            array.set(rr_hist_entry_lines, i, rrh_el)
+            array.set(rr_hist_stat_labels, i, rrh_slb)
 else if barstate.islast
     while array.size(rr_hist_stop_boxes) > 0
         f_del_box(array.pop(rr_hist_stop_boxes))
