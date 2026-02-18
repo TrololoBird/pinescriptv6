@@ -17,6 +17,7 @@ RAW_COLOR_RE = re.compile(
 FORBIDDEN_TUPLE_COLON_ASSIGN_RE = re.compile(r"\[[^\]]+\]\s*:=")
 FORBIDDEN_LABEL_STYLE_TYPE_RE = re.compile(r"\blabel\.style\s+[A-Za-z_]\w*")
 FORBIDDEN_STYLE_STRING_SIG_RE = re.compile(r"\bstring\s+(_style|_st|_sz)\b")
+FORBIDDEN_DRAW_STYLE_STRING_RE = re.compile(r"^\s*string\s+[A-Za-z_]\w*(?:style|size)\w*\s*=")
 HELPER_STYLE_STRING_SIG_RE = re.compile(r"^\s*f_(?:line_styled|label)\([^)]*\bstring\s+(_style|_st|_sz)\b")
 NAMED_ASSIGN_IN_CALL_RE = re.compile(r"\([^\n)]*\b[A-Za-z_]\w*\s*:=")
 
@@ -50,13 +51,23 @@ def _dev_object_budget_report(lines: list[str]) -> None:
     max_poc_keep = _extract_input_int(lines, "max_poc_keep") or 10
     rr_hist_keep = _extract_input_int(lines, "rr_hist_keep") or 80
 
+    rr_safety_margin = 40
+    rr_other_box_budget = 16
+    rr_other_line_budget = 32
+    rr_other_label_budget = 20
+    rr_keep_dev_cap = max(5, int(rr_hist_keep * 0.8))
+    rr_keep_by_boxes = max(5, (max(0, max_boxes - rr_safety_margin - rr_other_box_budget)) // 3)
+    rr_keep_by_lines = max(5, (max(0, max_lines - rr_safety_margin - rr_other_line_budget)) // 1)
+    rr_keep_by_labels = max(5, (max(0, max_labels - rr_safety_margin - rr_other_label_budget)) // 1)
+    rr_keep_effective = max(5, min(rr_hist_keep, rr_keep_dev_cap, rr_keep_by_boxes, rr_keep_by_lines, rr_keep_by_labels))
+
     # Estimated concurrent objects in worst active state (heuristic, DEV-warning only):
     # lines: poc_lines + wl + sl + rr_open_entry + rr_hist_entry
-    est_lines = max_poc_keep + 1 + 1 + 1 + rr_hist_keep
+    est_lines = max_poc_keep + 1 + 1 + 1 + rr_keep_effective
     # boxes: flat + rr_open(3) + rr_hist(3 per log entry)
-    est_boxes = 1 + 3 + (3 * rr_hist_keep)
+    est_boxes = 1 + 3 + (3 * rr_keep_effective)
     # labels: working level + trap up/down + pp + rr_open_stat + rr_hist_stat
-    est_labels = 1 + 1 + 1 + 1 + 1 + rr_hist_keep
+    est_labels = 1 + 1 + 1 + 1 + 1 + rr_keep_effective
 
     safe_ratio = 0.7
     warn = False
@@ -73,6 +84,7 @@ def _dev_object_budget_report(lines: list[str]) -> None:
             )
     if warn:
         print("WARN: Consider reducing max_poc_keep/rr_hist_keep or visual object density for safer long-history runtime.")
+    print(f"INFO: DEV RR keep effective={rr_keep_effective}, requested={rr_hist_keep}, caps(box/line/label)={rr_keep_by_boxes}/{rr_keep_by_lines}/{rr_keep_by_labels}")
 
 
 def main() -> int:
@@ -116,6 +128,11 @@ def main() -> int:
     if helper_style_string_hits:
         details = "; ".join([f"line {i}: {txt}" for i, txt in helper_style_string_hits[:10]])
         fail("Drawing helpers f_line_styled/f_label must not declare style or size params as string. " + details)
+
+    draw_style_string_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_DRAW_STYLE_STRING_RE.search(ln)]
+    if draw_style_string_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in draw_style_string_hits[:10]])
+        fail("Forbidden string-typed draw style/size variable. Use int enums for draw styles/sizes. " + details)
 
     # 1e) label.new(style=_style) must not be paired with string _style helper signature
     label_new_style_idx = _line_index(lines, re.compile(r"label\.new\([^)]*style\s*=\s*_style"))

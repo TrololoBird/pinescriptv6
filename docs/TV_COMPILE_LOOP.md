@@ -4,6 +4,7 @@
 - **User-only TradingView actions:** paste script, save, add to chart, switch symbols/timeframes, collect compiler/runtime output, and take screenshots.
 - **Codex-only repo actions:** consume artifacts committed in-repo, apply code/doc fixes, run repository checks (`make check-dev`, lint/contract guards), and request the next TV validation run.
 - Codex must **never** be instructed to perform TradingView UI actions directly.
+- Codex must not claim "compiled in TradingView"; only user-provided results in `docs/TV_FEEDBACK.md` are valid TV compile/runtime evidence.
 - Canonical flow reminder: the user runs TradingView compile/runtime checks; Codex only reads `docs/TV_FEEDBACK.md` and applies repo-side fixes.
 
 ## Required loop
