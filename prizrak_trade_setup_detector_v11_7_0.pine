@@ -1,6 +1,9 @@
 //@version=6
 indicator("Prizrak Trade Setup Detector v11.7.0", shorttitle="Prizrak11", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=300, format=format.price, precision=2)
 
+// DEV error-fix protocol:
+// If user reports: <line>: <error>, locate exact code at/near line; apply minimal fix; re-run make check-dev; do not refactor unrelated blocks.
+
 // =========================
 // INPUTS
 // =========================

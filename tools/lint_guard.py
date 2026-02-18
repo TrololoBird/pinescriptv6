@@ -16,8 +16,9 @@ RAW_COLOR_RE = re.compile(
 )
 FORBIDDEN_TUPLE_COLON_ASSIGN_RE = re.compile(r"\[[^\]]+\]\s*:=")
 FORBIDDEN_LABEL_STYLE_TYPE_RE = re.compile(r"\blabel\.style\s+[A-Za-z_]\w*")
+FORBIDDEN_ENUM_TYPE_RE = re.compile(r"\b(?:label\.style|line\.style|size)\s+[A-Za-z_]\w*")
 FORBIDDEN_STYLE_STRING_SIG_RE = re.compile(r"\bstring\s+(_style|_st|_sz)\b")
-FORBIDDEN_DRAW_STYLE_STRING_RE = re.compile(r"^\s*string\s+[A-Za-z_]\w*(?:style|size)\w*\s*=")
+FORBIDDEN_DRAW_STYLE_STRING_RE = re.compile(r"^\s*(?:var\s+)?string\s+[A-Za-z_]\w*(?:_style|_size|_st|_sz)\b\s*=")
 HELPER_STYLE_STRING_SIG_RE = re.compile(r"^\s*f_(?:line_styled|label)\([^)]*\bstring\s+(_style|_st|_sz)\b")
 NAMED_ASSIGN_IN_CALL_RE = re.compile(r"\([^\n)]*\b[A-Za-z_]\w*\s*:=")
 
@@ -87,6 +88,35 @@ def _dev_object_budget_report(lines: list[str]) -> None:
     print(f"INFO: DEV RR keep effective={rr_keep_effective}, requested={rr_hist_keep}, caps(box/line/label)={rr_keep_by_boxes}/{rr_keep_by_lines}/{rr_keep_by_labels}")
 
 
+
+def _check_persistent_object_shadowing(lines: list[str]) -> None:
+    persistent_decl_re = re.compile(r"^\s*var\s+(box|line|label)\s+([A-Za-z_]\w*)\b")
+    local_object_decl_re = re.compile(r"^\s*(?!var\b)(box|line|label)\s+([A-Za-z_]\w*)\b")
+
+    persistent: dict[str, tuple[str, int]] = {}
+    for i, ln in enumerate(lines, 1):
+        m = persistent_decl_re.match(ln)
+        if m:
+            persistent[m.group(2)] = (m.group(1), i)
+
+    shadow_hits: list[tuple[int, str, str, int]] = []
+    for i, ln in enumerate(lines, 1):
+        m = local_object_decl_re.match(ln)
+        if not m:
+            continue
+        obj_type, name = m.group(1), m.group(2)
+        if name in persistent:
+            ptype, pline = persistent[name]
+            shadow_hits.append((i, obj_type, name, pline))
+
+    if shadow_hits:
+        details = "; ".join([f"line {i}: {obj_type} {name} shadows persistent {name} declared at line {pline}" for i, obj_type, name, pline in shadow_hits[:10]])
+        fail(
+            "Forbidden shadowing of persistent drawing object vars (box/line/label). "
+            "Rename local variables to avoid lifetime/handle confusion. "
+            + details
+        )
+
 def main() -> int:
     if not PINE_FILE.exists():
         fail(f"Missing file: {PINE_FILE}")
@@ -112,11 +142,11 @@ def main() -> int:
             + details
         )
 
-    # 1c) Pine does not support label.style as a type annotation
-    bad_label_style_type_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_LABEL_STYLE_TYPE_RE.search(ln)]
-    if bad_label_style_type_hits:
-        details = "; ".join([f"line {i}: {txt}" for i, txt in bad_label_style_type_hits[:10]])
-        fail("Forbidden label.style type annotation. Use int or inferred type with label.style_* constants. " + details)
+    # 1c) Pine does not support enum namespaces as type annotations (label.style/line.style/size)
+    bad_enum_type_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_ENUM_TYPE_RE.search(ln)]
+    if bad_enum_type_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in bad_enum_type_hits[:10]])
+        fail("Forbidden enum type annotation. Use int or inferred type with *_style/size constants. " + details)
 
     # 1d) forbid string-typed style/size helper params used for drawing enums
     bad_style_sig_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_STYLE_STRING_SIG_RE.search(ln)]
@@ -171,6 +201,9 @@ def main() -> int:
     if var_hits:
         details = "; ".join([f"line {i}: {txt}" for i, txt in var_hits[:10]])
         fail(f"Forbidden var self-assignment detected by regex {VAR_SELF_ASSIGN_RE.pattern}: {details}")
+
+    # 2b) prevent local shadowing of persistent box/line/label handles
+    _check_persistent_object_shadowing(lines)
 
     # 3) centralized constructors/deletes
     text = "\n".join(lines)
