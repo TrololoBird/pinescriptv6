@@ -145,3 +145,18 @@
   - PP pending/confirm/active blocks BUY+SELL while alive.
   - Level zone stays visible around working level (clean mode = higher transparency).
   - RR overlays/history remain present without object-limit warnings.
+
+## 2026-02-18 23:55:00Z — Strict-compat TV validation checklist (Codex append-only)
+- Local release checks passed before TV handoff:
+  - `make check-release`
+  - `make contract-check`
+  - `make lint`
+  - `make check-dev`
+  - `make tv-export`
+- Contract integrity:
+  - `git diff -- contract.lock.json` is empty.
+- Focus checklist for TV rerun:
+  - Verify trap mismatch gating is HTF-only (no STF dependency in break/trap gating).
+  - Verify RR gate blocks setup creation when `rr_quality < rr_min`.
+  - Verify level zone remains visible around `working_level` and is more transparent in `clean_mode`.
+  - Verify POC lines and RR history remain available in `clean_mode`.
