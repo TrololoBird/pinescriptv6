@@ -74,3 +74,11 @@
   - `make check-dev`
 - Confirmed `prizrak_trade_setup_detector_v11_7_0.pine` remains release-clean with contract lock parity for `indicator(...)`, all `input.*`, and all `alertcondition(...)` declarations.
 - Confirmed `contract.lock.json` was not refreshed/edited during this pass (stable strict-compat preserved).
+
+## 2026-02-18 (strict-compat release-ideal pass)
+
+- Enforced strict-compat trap mismatch semantics to HTF-only (`tf_mismatch_*` no longer depends on STF trend direction).
+- Applied RR gate to setup generation (BUY/SELL now require `rr_quality >= rr_min` when `rr_gate_enabled=true`, with zero-risk guard).
+- Switched setup flow to base-setup + RR-gated final setup states to keep diagnostics explicit.
+- Preserved release contract parity and lock stability (`contract.lock.json` untouched).
+- Revalidated full required gate set: `make check-release`, `make contract-check`, `make lint`, `make check-dev`, `make tv-export`.

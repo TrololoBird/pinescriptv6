@@ -892,8 +892,8 @@ if enable_traps and not na(working_level)
 bool trap_up = false
 bool trap_down = false
 int trap_flag = 0
-bool tf_mismatch_up = htf_trend_dir == -1 or stf_trend_dir == -1
-bool tf_mismatch_down = htf_trend_dir == 1 or stf_trend_dir == 1
+bool tf_mismatch_up = htf_trend_dir <= 0
+bool tf_mismatch_down = htf_trend_dir >= 0
 bool trap_tf_ok_up = not TRAP_NEED_TF_MISMATCH or tf_mismatch_up
 bool trap_tf_ok_down = not TRAP_NEED_TF_MISMATCH or tf_mismatch_down
 if not na(last_break_bar) and not na(working_level)
@@ -959,12 +959,41 @@ bool stf_buy_priority = stf_trend_dir == 1 or stf_trend_dir == 0
 bool stf_sell_priority = stf_trend_dir == -1 or stf_trend_dir == 0
 bool buy_dir_ok = (htf_buy_priority or htf_neutral) and stf_buy_priority or allow_counter
 bool sell_dir_ok = (htf_sell_priority or htf_neutral) and stf_sell_priority or allow_counter
-buy_setup = not pp_block_buy and work_cross_up and buy_dir_ok and bull_ok and near_level
-sell_setup = not pp_block_sell and work_cross_dn and sell_dir_ok and bear_ok and near_level
+bool buy_setup_base = not pp_block_buy and work_cross_up and buy_dir_ok and bull_ok and near_level
+bool sell_setup_base = not pp_block_sell and work_cross_dn and sell_dir_ok and bear_ok and near_level
+
+bool rr_ok_buy = true
+bool rr_ok_sell = true
+float rr_quality_buy = na
+float rr_quality_sell = na
+if buy_setup_base or sell_setup_base
+    float en_buy = not na(working_level) ? working_level : close
+    float en_sell = not na(working_level) ? working_level : close
+    float st_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : en_buy - atr * SL_MIN_ATR_MULT
+    float st_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : en_sell + atr * SL_MIN_ATR_MULT
+    float st_buy = math.min(st_buy_raw, en_buy - atr * SL_MIN_ATR_MULT)
+    float st_sell = math.max(st_sell_raw, en_sell + atr * SL_MIN_ATR_MULT)
+    float risk_buy = math.abs(en_buy - st_buy)
+    float risk_sell = math.abs(en_sell - st_sell)
+    float tp_main_buy = en_buy + risk_buy * rr_main_mult
+    float tp_ext_buy = en_buy + risk_buy * rr_ext_mult
+    float tp_main_sell = en_sell - risk_sell * rr_main_mult
+    float tp_ext_sell = en_sell - risk_sell * rr_ext_mult
+    float rr_main_buy = risk_buy > 0 ? math.abs(tp_main_buy - en_buy) / risk_buy : na
+    float rr_ext_buy = risk_buy > 0 ? math.abs(tp_ext_buy - en_buy) / risk_buy : na
+    float rr_main_sell = risk_sell > 0 ? math.abs(tp_main_sell - en_sell) / risk_sell : na
+    float rr_ext_sell = risk_sell > 0 ? math.abs(tp_ext_sell - en_sell) / risk_sell : na
+    rr_quality_buy := risk_buy > 0 ? math.max(rr_main_buy, rr_ext_buy) : na
+    rr_quality_sell := risk_sell > 0 ? math.max(rr_main_sell, rr_ext_sell) : na
+    rr_ok_buy := risk_buy > 0 and rr_quality_buy >= rr_min
+    rr_ok_sell := risk_sell > 0 and rr_quality_sell >= rr_min
+
+buy_setup = buy_setup_base and (not rr_gate_enabled or rr_ok_buy)
+sell_setup = sell_setup_base and (not rr_gate_enabled or rr_ok_sell)
 
 open_buy = buy_setup
 open_sell = sell_setup
-int setup_diag_state = na(working_level) ? -6 : ((pp_block_buy and work_cross_up) or (pp_block_sell and work_cross_dn)) ? -5 : (not work_cross_up and not work_cross_dn) ? -4 : ((work_cross_up and not buy_dir_ok) or (work_cross_dn and not sell_dir_ok)) ? -3 : ((work_cross_up and not bull_ok) or (work_cross_dn and not bear_ok)) ? -2 : not near_level ? -1 : (buy_setup or sell_setup) ? 2 : 1
+int setup_diag_state = na(working_level) ? -6 : ((pp_block_buy and work_cross_up) or (pp_block_sell and work_cross_dn)) ? -5 : (not work_cross_up and not work_cross_dn) ? -4 : ((work_cross_up and not buy_dir_ok) or (work_cross_dn and not sell_dir_ok)) ? -3 : ((work_cross_up and not bull_ok) or (work_cross_dn and not bear_ok)) ? -2 : not near_level ? -1 : ((buy_setup_base and rr_gate_enabled and not rr_ok_buy) or (sell_setup_base and rr_gate_enabled and not rr_ok_sell)) ? 0 : (buy_setup or sell_setup) ? 2 : 1
 if debug_mode and barstate.islast and setup_diag_state != dbg_setup_state
     if setup_diag_state == -6
         f_dbg_push("SETUP:block work_lvl=na")
@@ -978,37 +1007,15 @@ if debug_mode and barstate.islast and setup_diag_state != dbg_setup_state
         f_dbg_push("SETUP:block filter")
     else if setup_diag_state == -1
         f_dbg_push("SETUP:block near=0")
+    else if setup_diag_state == 0
+        f_dbg_push("SETUP:block rr_gate")
     else if setup_diag_state == 1
         f_dbg_push("SETUP:block side_mismatch")
     else
         f_dbg_push("SETUP:raw ok")
     dbg_setup_state := setup_diag_state
-
-bool rr_ok_buy = true
-bool rr_ok_sell = true
-bool rr_mult_ok = true
-float rr_quality_buy = na
-float rr_quality_sell = na
-if buy_setup or sell_setup
-    float en_buy = not na(working_level) ? working_level : close
-    float en_sell = not na(working_level) ? working_level : close
-    float st_buy_raw = not na(last_flat_low) and last_flat_valid ? last_flat_low : en_buy - atr * SL_MIN_ATR_MULT
-    float st_sell_raw = not na(last_flat_high) and last_flat_valid ? last_flat_high : en_sell + atr * SL_MIN_ATR_MULT
-    float st_buy = math.min(st_buy_raw, en_buy - atr * SL_MIN_ATR_MULT)
-    float st_sell = math.max(st_sell_raw, en_sell + atr * SL_MIN_ATR_MULT)
-    float risk_buy = math.abs(en_buy - st_buy)
-    float risk_sell = math.abs(en_sell - st_sell)
-    float tp_main_buy = en_buy + risk_buy * rr_main_mult
-    float tp_ext_buy = en_buy + risk_buy * rr_ext_mult
-    float tp_main_sell = en_sell - risk_sell * rr_main_mult
-    float tp_ext_sell = en_sell - risk_sell * rr_ext_mult
-    rr_quality_buy := risk_buy > 0 ? math.max(math.abs(tp_main_buy - en_buy), math.abs(tp_ext_buy - en_buy)) / risk_buy : na
-    rr_quality_sell := risk_sell > 0 ? math.max(math.abs(en_sell - tp_main_sell), math.abs(en_sell - tp_ext_sell)) / risk_sell : na
-    rr_mult_ok := math.max(rr_main_mult, rr_ext_mult) >= rr_min
-    rr_ok_buy := risk_buy > 0 and rr_mult_ok
-    rr_ok_sell := risk_sell > 0 and rr_mult_ok
-if debug_mode and barstate.islast and rr_gate_enabled and (buy_setup or sell_setup)
-    f_dbg_push("RR:qual pass=" + str.tostring((buy_setup and rr_ok_buy) or (sell_setup and rr_ok_sell) ? 1 : 0))
+if debug_mode and barstate.islast and rr_gate_enabled and (buy_setup_base or sell_setup_base)
+    f_dbg_push("RR:qual pass=" + str.tostring((buy_setup_base and rr_ok_buy) or (sell_setup_base and rr_ok_sell) ? 1 : 0))
 
 if not position_active and (open_buy or open_sell)
     position_active := true
