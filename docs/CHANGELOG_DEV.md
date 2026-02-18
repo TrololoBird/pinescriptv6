@@ -2,6 +2,13 @@
 
 ## 2026-02-18
 
+- Added design-only architecture document `docs/PRIZRAK_TRADE_SETUP_DETECTOR_V2_ARCHITECTURE.md`:
+  - Captures the full v2.0 module map (STF/MTF/Entry TF responsibilities, state containers, setup engine, RR overlay, alerts, debug flow).
+  - Defines strict per-bar execution order and formula-level contracts without introducing Pine code changes.
+
+
+## 2026-02-18
+
 - Added STF+HTF trend separation for setup direction and trap context:
   - New `stf` timeframe input for higher-level direction alignment.
   - Setup gating now requires HTF+STF directional agreement unless counter-trend is explicitly allowed.
