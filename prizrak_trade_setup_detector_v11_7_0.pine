@@ -1181,7 +1181,6 @@ else if barstate.islast
 // DEBUG
 // =========================
 float debug_flat_mid = (in_flat and not na(flat_high) and not na(flat_low)) ? (flat_high + flat_low) / 2.0 : na
-int debug_flat_state_code = flat_diag_state
 int debug_pp_state = choch_active ? choch_kind : choch_confirm_dir != 0 and confirm_alive ? choch_confirm_kind : choch_pending_dir != 0 and pending_alive ? choch_pending_kind : 0
 int debug_rr_gate_state = (open_buy or open_sell) ? 1 : 0
 float debug_rr_quality = buy_setup ? rr_quality_buy : sell_setup ? rr_quality_sell : na
@@ -1289,7 +1288,7 @@ plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_work
 plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flag", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
 plot(debug_mode ? debug_rr_quality : na, "DBG RR Quality", color=skin_take_fill, linewidth=1, style=plot.style_line)
 plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns)
-plot(debug_mode ? debug_flat_state_code : na, "DBG Flat State Code", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
+plot(debug_mode ? flat_diag_state : na, "DBG Flat State Code", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
 plot(debug_mode ? debug_working_tests : na, "DBG POC Working Tests", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
 plot(debug_mode ? (stop_volume_event ? 1 : 0) : na, "DBG SV Event", color=skin_stop_line_col, linewidth=1, style=plot.style_columns, display=display.none)
 plot(debug_mode ? (debug_break_detected ? 1 : 0) : na, "DBG Trap Break", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none)
