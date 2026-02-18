@@ -857,6 +857,16 @@ if debug_mode and barstate.islast and trap_diag_state != dbg_trap_state
         f_dbg_push("TRAP:hit dir=" + last_break_dir)
     dbg_trap_state := trap_diag_state
 
+trap_up = false
+trap_down = false
+int trap_flag = 0
+if not na(last_break_bar) and not na(working_level)
+    in_window = (bar_index - last_break_bar) <= trap_max_bars
+    bool vol_trap_ok = not trap_use_volume or volume < vol_ma * trap_vol_drop
+    trap_up := last_break_dir == "up" and in_window and close < working_level and vol_trap_ok
+    trap_down := last_break_dir == "down" and in_window and close > working_level and vol_trap_ok
+trap_flag := trap_up ? 1 : trap_down ? -1 : 0
+
 bool trap_up_icon = trap_up and (icon_cooldown == 0 or na(last_trap_up_icon_bar) or (bar_index - last_trap_up_icon_bar >= icon_cooldown))
 bool trap_down_icon = trap_down and (icon_cooldown == 0 or na(last_trap_down_icon_bar) or (bar_index - last_trap_down_icon_bar >= icon_cooldown))
 bool choch_true_evt = choch_active and (choch_kind == 2 or choch_kind == 4)
@@ -1187,9 +1197,6 @@ int debug_pp_state = choch_active ? choch_kind : choch_confirm_dir != 0 and conf
 int debug_rr_gate_state = (open_buy or open_sell) ? 1 : 0
 float debug_rr_quality = buy_setup ? rr_quality_buy : sell_setup ? rr_quality_sell : na
 int debug_flat_valid_state = flat_valid_now ? 1 : last_flat_valid ? 1 : 0
-int debug_flat_state_code = in_flat ? 1 : (not na(last_flat_finalized_bar) and bar_index - last_flat_finalized_bar <= 1 ? 2 : 0)
-float debug_flat_hi = in_flat ? flat_high : last_flat_high
-float debug_flat_lo = in_flat ? flat_low : last_flat_low
 float debug_poc_level = working_level
 int debug_trap_flags = trap_flag
 float debug_rr_main_mult = rr_main_mult
@@ -1226,55 +1233,47 @@ string debug_diag_last = f_dbg_last(DBG_SHOW_LAST)
 
 if debug_mode and show_debug_table and barstate.islast
     if na(debug_table)
-        debug_table := table.new(position.top_right, 2, 24, border_width=1)
-    table.cell(debug_table, 0, 0, "flat state/final")
-    table.cell(debug_table, 1, 0, str.tostring(debug_flat_state_code) + " / " + str.tostring(last_flat_finalized_bar))
-    table.cell(debug_table, 0, 1, "flat hi/lo")
-    table.cell(debug_table, 1, 1, str.tostring(debug_flat_hi, format.mintick) + " / " + str.tostring(debug_flat_lo, format.mintick))
-    table.cell(debug_table, 0, 2, "flat touch/exit")
-    table.cell(debug_table, 1, 2, str.tostring(touches_top) + "/" + str.tostring(touches_bottom) + " ec=" + str.tostring(exit_confirm_cnt))
-    table.cell(debug_table, 0, 3, "flat cand/valid")
-    table.cell(debug_table, 1, 3, str.tostring(cand_ok ? 1 : 0) + "/" + str.tostring(debug_flat_valid_state))
-    table.cell(debug_table, 0, 4, "poc last/work")
-    table.cell(debug_table, 1, 4, str.tostring(debug_poc_level, format.mintick) + " / " + str.tostring(working_level, format.mintick))
-    table.cell(debug_table, 0, 5, "poc tests/active")
-    table.cell(debug_table, 1, 5, str.tostring(debug_working_tests) + " / " + str.tostring(debug_active_poc_count))
-    table.cell(debug_table, 0, 6, "sv event/level")
-    table.cell(debug_table, 1, 6, str.tostring(stop_volume_event ? 1 : 0) + " / " + str.tostring(in_stop ? stop_high : na, format.mintick))
+        debug_table := table.new(position.top_right, 2, 20, border_width=1)
+    table.cell(debug_table, 0, 0, "htf_trend_dir")
+    table.cell(debug_table, 1, 0, str.tostring(debug_htf_trend_dir))
+    table.cell(debug_table, 0, 1, "flat cand/valid")
+    table.cell(debug_table, 1, 1, str.tostring(cand_ok ? 1 : 0) + "/" + str.tostring(debug_flat_valid_state))
+    table.cell(debug_table, 0, 2, "flat age touch")
+    table.cell(debug_table, 1, 2, str.tostring(debug_flat_age) + " | " + str.tostring(touches_top) + "/" + str.tostring(touches_bottom))
+    table.cell(debug_table, 0, 3, "flat rng%/atr")
+    table.cell(debug_table, 1, 3, str.tostring(cand_rng_pct * 100.0, "#.##") + "/" + str.tostring(debug_flat_rng_atr, "#.##"))
+    table.cell(debug_table, 0, 4, "poc count/work")
+    table.cell(debug_table, 1, 4, str.tostring(array.size(poc_prices)) + " / " + str.tostring(working_level, format.mintick))
+    table.cell(debug_table, 0, 5, "poc last/dead")
+    table.cell(debug_table, 1, 5, str.tostring(debug_poc_level, format.mintick) + " / " + str.tostring(poc_dead_tests))
+    table.cell(debug_table, 0, 6, "stop in/price")
+    table.cell(debug_table, 1, 6, str.tostring(in_stop ? 1 : 0) + " / " + str.tostring(stop_price, format.mintick))
     table.cell(debug_table, 0, 7, "trap flag")
     table.cell(debug_table, 1, 7, str.tostring(debug_trap_flags))
-    table.cell(debug_table, 0, 8, "trap break/window")
-    table.cell(debug_table, 1, 8, str.tostring(debug_break_detected ? 1 : 0) + " / " + str.tostring(debug_trap_window ? 1 : 0))
-    table.cell(debug_table, 0, 9, "trap vol_gate")
-    table.cell(debug_table, 1, 9, str.tostring(debug_trap_vol_pass ? 1 : 0))
-    table.cell(debug_table, 0, 10, "pp state")
-    table.cell(debug_table, 1, 10, debug_pp_state_text + "(" + str.tostring(debug_pp_state) + ")")
-    table.cell(debug_table, 0, 11, "pp pending/dir")
-    table.cell(debug_table, 1, 11, str.tostring(debug_pp_pending) + " dir=" + str.tostring(debug_pp_pending_dir))
-    table.cell(debug_table, 0, 12, "pp confirm cnt")
-    table.cell(debug_table, 1, 12, str.tostring(debug_pp_confirm) + " / " + str.tostring(choch_confirm_count))
-    table.cell(debug_table, 0, 13, "htf dir")
-    table.cell(debug_table, 1, 13, str.tostring(debug_htf_trend_dir))
-    table.cell(debug_table, 0, 14, "htf pivots prev")
-    table.cell(debug_table, 1, 14, str.tostring(debug_prev_pivot_high, format.mintick) + " / " + str.tostring(debug_prev_pivot_low, format.mintick))
-    table.cell(debug_table, 0, 15, "htf pivots last")
-    table.cell(debug_table, 1, 15, str.tostring(debug_last_pivot_high, format.mintick) + " / " + str.tostring(debug_last_pivot_low, format.mintick))
-    table.cell(debug_table, 0, 16, "rr gate/qual")
-    table.cell(debug_table, 1, 16, str.tostring(debug_rr_gate_state) + " / " + str.tostring(debug_rr_quality, "#.###"))
-    table.cell(debug_table, 0, 17, "rr keep req/eff")
-    table.cell(debug_table, 1, 17, str.tostring(rr_keep_requested) + " / " + str.tostring(internal_rr_keep))
-    table.cell(debug_table, 0, 18, "rr keep box/ln/lb")
-    table.cell(debug_table, 1, 18, str.tostring(rr_keep_by_boxes) + "/" + str.tostring(rr_keep_by_lines) + "/" + str.tostring(rr_keep_by_labels))
-    table.cell(debug_table, 0, 19, "setup raw/final")
-    table.cell(debug_table, 1, 19, str.tostring(buy_setup or sell_setup ? 1 : 0) + "/" + str.tostring(open_buy or open_sell ? 1 : 0))
-    table.cell(debug_table, 0, 20, "cross up/dn")
-    table.cell(debug_table, 1, 20, str.tostring(work_cross_up ? 1 : 0) + "/" + str.tostring(work_cross_dn ? 1 : 0))
-    table.cell(debug_table, 0, 21, "near/in_flat")
-    table.cell(debug_table, 1, 21, str.tostring(near_level ? 1 : 0) + " / " + str.tostring(in_flat ? 1 : 0))
-    table.cell(debug_table, 0, 22, "flat rng%/atr")
-    table.cell(debug_table, 1, 22, str.tostring(cand_rng_pct * 100.0, "#.##") + "/" + str.tostring(debug_flat_rng_atr, "#.##"))
-    table.cell(debug_table, 0, 23, "diag last")
-    table.cell(debug_table, 1, 23, debug_diag_last)
+    table.cell(debug_table, 0, 8, "pp state")
+    table.cell(debug_table, 1, 8, debug_pp_state_text + "(" + str.tostring(debug_pp_state) + ")")
+    table.cell(debug_table, 0, 9, "pp pending/confirm")
+    table.cell(debug_table, 1, 9, str.tostring(debug_pp_pending) + "(" + str.tostring(debug_pp_pending_left) + ") " + str.tostring(debug_pp_confirm) + "(" + str.tostring(debug_pp_confirm_left) + ")")
+    table.cell(debug_table, 0, 10, "pp confirm_cnt")
+    table.cell(debug_table, 1, 10, str.tostring(choch_confirm_count))
+    table.cell(debug_table, 0, 11, "rr risk")
+    table.cell(debug_table, 1, 11, str.tostring(debug_risk, format.mintick))
+    table.cell(debug_table, 0, 12, "rr mult main/ext")
+    table.cell(debug_table, 1, 12, str.tostring(debug_rr_main_mult, "#.###") + "/" + str.tostring(debug_rr_ext_mult, "#.###"))
+    table.cell(debug_table, 0, 13, "rr gate/qual")
+    table.cell(debug_table, 1, 13, str.tostring(debug_rr_gate_state) + " / " + str.tostring(debug_rr_quality, "#.###"))
+    table.cell(debug_table, 0, 14, "setup raw/final")
+    table.cell(debug_table, 1, 14, str.tostring(buy_setup or sell_setup ? 1 : 0) + "/" + str.tostring(open_buy or open_sell ? 1 : 0))
+    table.cell(debug_table, 0, 15, "cross up/dn")
+    table.cell(debug_table, 1, 15, str.tostring(work_cross_up ? 1 : 0) + "/" + str.tostring(work_cross_dn ? 1 : 0))
+    table.cell(debug_table, 0, 16, "near_level")
+    table.cell(debug_table, 1, 16, str.tostring(near_level ? 1 : 0))
+    table.cell(debug_table, 0, 17, "in_flat/in_stop")
+    table.cell(debug_table, 1, 17, str.tostring(in_flat ? 1 : 0) + "/" + str.tostring(in_stop ? 1 : 0))
+    table.cell(debug_table, 0, 18, "pivot_h/pivot_l")
+    table.cell(debug_table, 1, 18, str.tostring(debug_last_pivot_high, format.mintick) + "/" + str.tostring(debug_last_pivot_low, format.mintick))
+    table.cell(debug_table, 0, 19, "diag last")
+    table.cell(debug_table, 1, 19, debug_diag_last)
 else
     if not na(debug_table)
         table.delete(debug_table)
