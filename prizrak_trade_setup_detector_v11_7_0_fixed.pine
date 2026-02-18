@@ -94,13 +94,19 @@ squeeze_factor = input.float(0.06, "BBW threshold", step=0.005, minval=0.001, ma
 f_fmt(float p) => str.tostring(p, format.mintick)
 f_clamp_int(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
 
+f_idx_to_time(int _x) =>
+    int off = f_clamp_int(bar_index - _x, 0, bar_index)
+    time[off]
+
 f_box(box _bx, int _x1, float _y1, int _x2, float _y2, color _bg, color _bd, int _bw) =>
     box out = _bx
+    int t1 = f_idx_to_time(_x1)
+    int t2 = f_idx_to_time(_x2)
     if na(out)
-        out := box.new(_x1, _y1, _x2, _y2, bgcolor=_bg, border_color=_bd, border_width=_bw)
+        out := box.new(t1, _y1, t2, _y2, xloc=xloc.bar_time, bgcolor=_bg, border_color=_bd, border_width=_bw)
     else
-        box.set_left(out, _x1)
-        box.set_right(out, _x2)
+        box.set_left(out, t1)
+        box.set_right(out, t2)
         box.set_top(out, _y1)
         box.set_bottom(out, _y2)
         box.set_bgcolor(out, _bg)
