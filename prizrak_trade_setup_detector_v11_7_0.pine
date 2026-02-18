@@ -157,14 +157,17 @@ rr_cTagPnl  = skin_take_text_col
 // =========================
 f_fmt(float p) => str.tostring(p, format.mintick)
 f_clamp_int(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
+f_clamp_bar_x(int x) => f_clamp_int(x, bar_index - 500, bar_index + 500)
 
 f_box(box _bx, int _x1, float _y1, int _x2, float _y2, color _bg, color _bd, int _bw) =>
     box out = _bx
+    int x1 = f_clamp_bar_x(_x1)
+    int x2 = f_clamp_bar_x(_x2)
     if na(out)
-        out := box.new(_x1, _y1, _x2, _y2, bgcolor=_bg, border_color=_bd, border_width=_bw)
+        out := box.new(x1, _y1, x2, _y2, bgcolor=_bg, border_color=_bd, border_width=_bw)
     else
-        box.set_left(out, _x1)
-        box.set_right(out, _x2)
+        box.set_left(out, x1)
+        box.set_right(out, x2)
         box.set_top(out, _y1)
         box.set_bottom(out, _y2)
         box.set_bgcolor(out, _bg)
@@ -174,22 +177,26 @@ f_box(box _bx, int _x1, float _y1, int _x2, float _y2, color _bg, color _bd, int
 
 f_line(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w) =>
     line out = _ln
+    int x1 = f_clamp_bar_x(_x1)
+    int x2 = f_clamp_bar_x(_x2)
     if na(out)
-        out := line.new(_x1, _y1, _x2, _y2, color=_c, width=_w)
+        out := line.new(x1, _y1, x2, _y2, color=_c, width=_w)
     else
-        line.set_xy1(out, _x1, _y1)
-        line.set_xy2(out, _x2, _y2)
+        line.set_xy1(out, x1, _y1)
+        line.set_xy2(out, x2, _y2)
         line.set_color(out, _c)
         line.set_width(out, _w)
     out
 
 f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w, string _lineStyle) =>
     line out = _ln
+    int x1 = f_clamp_bar_x(_x1)
+    int x2 = f_clamp_bar_x(_x2)
     if na(out)
-        out := line.new(_x1, _y1, _x2, _y2, color=_c, width=_w, style=_lineStyle)
+        out := line.new(x1, _y1, x2, _y2, color=_c, width=_w, style=_lineStyle)
     else
-        line.set_xy1(out, _x1, _y1)
-        line.set_xy2(out, _x2, _y2)
+        line.set_xy1(out, x1, _y1)
+        line.set_xy2(out, x2, _y2)
         line.set_color(out, _c)
         line.set_width(out, _w)
         line.set_style(out, _lineStyle)
@@ -197,10 +204,11 @@ f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w
 
 f_label(label _lb, int _x, float _y, string _txt, string _labelStyle, color _bg, color _tc, string _labelSize) =>
     label out = _lb
+    int x = f_clamp_bar_x(_x)
     if na(out)
-        out := label.new(_x, _y, _txt, style=_labelStyle, color=_bg, textcolor=_tc, size=_labelSize)
+        out := label.new(x, _y, _txt, style=_labelStyle, color=_bg, textcolor=_tc, size=_labelSize)
     else
-        label.set_xy(out, _x, _y)
+        label.set_xy(out, x, _y)
         label.set_text(out, _txt)
         label.set_style(out, _labelStyle)
         label.set_color(out, _bg)
