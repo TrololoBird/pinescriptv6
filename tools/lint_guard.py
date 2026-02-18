@@ -16,6 +16,8 @@ RAW_COLOR_RE = re.compile(
 )
 FORBIDDEN_TUPLE_COLON_ASSIGN_RE = re.compile(r"\[[^\]]+\]\s*:=")
 FORBIDDEN_LABEL_STYLE_TYPE_RE = re.compile(r"\blabel\.style\s+[A-Za-z_]\w*")
+FORBIDDEN_STYLE_STRING_SIG_RE = re.compile(r"\bstring\s+(_style|_st|_sz)\b")
+HELPER_STYLE_STRING_SIG_RE = re.compile(r"^\s*f_(?:line_styled|label)\([^)]*\bstring\s+(_style|_st|_sz)\b")
 NAMED_ASSIGN_IN_CALL_RE = re.compile(r"\([^\n)]*\b[A-Za-z_]\w*\s*:=")
 
 
@@ -104,7 +106,25 @@ def main() -> int:
         details = "; ".join([f"line {i}: {txt}" for i, txt in bad_label_style_type_hits[:10]])
         fail("Forbidden label.style type annotation. Use int or inferred type with label.style_* constants. " + details)
 
-    # 1d) named-argument style assignment ':=' inside function calls is invalid in Pine
+    # 1d) forbid string-typed style/size helper params used for drawing enums
+    bad_style_sig_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_STYLE_STRING_SIG_RE.search(ln)]
+    if bad_style_sig_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in bad_style_sig_hits[:10]])
+        fail("Forbidden string style/size parameter name (_style/_st/_sz). Use int for drawing enums. " + details)
+
+    helper_style_string_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if HELPER_STYLE_STRING_SIG_RE.search(ln)]
+    if helper_style_string_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in helper_style_string_hits[:10]])
+        fail("Drawing helpers f_line_styled/f_label must not declare style or size params as string. " + details)
+
+    # 1e) label.new(style=_style) must not be paired with string _style helper signature
+    label_new_style_idx = _line_index(lines, re.compile(r"label\.new\([^)]*style\s*=\s*_style"))
+    if label_new_style_idx is not None:
+        label_sig_idx = _line_index(lines, re.compile(r"^\s*f_label\([^)]*\bstring\s+_style\b"))
+        if label_sig_idx is not None:
+            fail("label.new(style=_style) detected with string _style parameter in f_label signature; use int.")
+
+    # 1f) named-argument style assignment ':=' inside function calls is invalid in Pine
     named_assign_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if NAMED_ASSIGN_IN_CALL_RE.search(ln)]
     if named_assign_hits:
         details = "; ".join([f"line {i}: {txt}" for i, txt in named_assign_hits[:10]])
@@ -114,7 +134,7 @@ def main() -> int:
             + details
         )
 
-    # 1e) cap declarations must appear before first use in helpers
+    # 1g) cap declarations must appear before first use in helpers
     poc_bins_decl = _line_index(lines, re.compile(r"^\s*int\s+poc_bins_cap\s*=\s*"))
     poc_bins_use = _line_index(lines, re.compile(r"\bpoc_bins_cap\b"))
     if poc_bins_decl is None:
