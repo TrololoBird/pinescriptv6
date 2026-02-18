@@ -1100,7 +1100,12 @@ var line rr_open_entry_line = na
 var label rr_open_stat_label = na
 if rr_draw_open and open_active and not clean_mode
     int rr_right = bar_index + rr_open_extend
-    [rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label] = f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
+    [rr_open_stop_box_new, rr_open_take_box_new, rr_open_take2_box_new, rr_open_entry_line_new, rr_open_stat_label_new] = f_rr_draw_one(open_entryBar, rr_right, open_dir, open_entry, open_stopOrig, open_takeMain, open_takeExt, "OPEN", rr_open_stop_box, rr_open_take_box, rr_open_take2_box, rr_open_entry_line, rr_open_stat_label, rr_show_stat)
+    rr_open_stop_box := rr_open_stop_box_new
+    rr_open_take_box := rr_open_take_box_new
+    rr_open_take2_box := rr_open_take2_box_new
+    rr_open_entry_line := rr_open_entry_line_new
+    rr_open_stat_label := rr_open_stat_label_new
 else
     if not na(rr_open_stop_box)
         f_del_box(rr_open_stop_box)
@@ -1152,7 +1157,12 @@ if show_rr_history and not clean_mode and barstate.islast
             box rrh_t2 = array.get(rr_hist_take2_boxes, i)
             line rrh_el = array.get(rr_hist_entry_lines, i)
             label rrh_slb = array.get(rr_hist_stat_labels, i)
-            [rrh_sb, rrh_tb, rrh_t2, rrh_el, rrh_slb] = f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, rrh_sb, rrh_tb, rrh_t2, rrh_el, rrh_slb, rr_show_stat)
+            [rrh_sb_new, rrh_tb_new, rrh_t2_new, rrh_el_new, rrh_slb_new] = f_rr_draw_one(x1, x2, d, en, st, tm, te, rs, rrh_sb, rrh_tb, rrh_t2, rrh_el, rrh_slb, rr_show_stat)
+            rrh_sb := rrh_sb_new
+            rrh_tb := rrh_tb_new
+            rrh_t2 := rrh_t2_new
+            rrh_el := rrh_el_new
+            rrh_slb := rrh_slb_new
             array.set(rr_hist_stop_boxes, i, rrh_sb)
             array.set(rr_hist_take_boxes, i, rrh_tb)
             array.set(rr_hist_take2_boxes, i, rrh_t2)
