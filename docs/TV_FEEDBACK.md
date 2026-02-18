@@ -123,3 +123,25 @@
   - PP pending/confirm/active blocks both BUY and SELL setups.
   - Level zone is visible around working level (thinner in clean mode).
   - RR history and open RR overlays remain present without object-limit warnings.
+
+## 2026-02-18 23:41:45Z — Strict-compat recheck (Codex)
+- Repository gates passed locally in strict mode.
+- Export command executed: `make tv-export`.
+- No lock refresh performed (`contract.lock.json` unchanged).
+
+### User checklist for TradingView validation (append raw outputs below)
+- Symbols/TF:
+  - BTCUSDT 15m
+  - BTCUSDT 1h
+  - AAPL 1D
+- For each run, please append:
+  - Raw compiler output (verbatim).
+  - Raw runtime warnings (verbatim).
+  - Screenshot with `debug_mode=true` and `show_debug_table=true`.
+  - Screenshot with `debug_mode=false`.
+- Focus points:
+  - Working level aligns to nearest active POC.
+  - Trap break alignment follows HTF direction gates.
+  - PP pending/confirm/active blocks BUY+SELL while alive.
+  - Level zone stays visible around working level (clean mode = higher transparency).
+  - RR overlays/history remain present without object-limit warnings.
