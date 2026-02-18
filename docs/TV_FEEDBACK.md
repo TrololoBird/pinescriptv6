@@ -42,3 +42,20 @@
 - Re-run TradingView compile on the updated export and paste **raw** compiler output here.
 - Confirm whether these prior classes are resolved: undeclared identifiers, duplicate definitions, shadowing, style/type mismatches, `':='` syntax errors.
 - If compile passes, add runtime warnings (if any) and screenshots (debug on/off) plus short visual mismatch notes.
+
+## 2026-02-18 17:56:42Z — DEV diagnostics added; awaiting user TV run
+- Status: DEV-only gating telemetry and heartbeat debug visuals were added in-repo.
+- TradingView run ownership: user executes TV compile/runtime loop; Codex consumes appended feedback from this file.
+
+### User TV rerun checklist
+- Symbol/timeframe matrix:
+  - 15m BTCUSDT.P
+  - 1h BTCUSDT.P
+  - 1D AAPL
+- For each chart, run with `debug_mode=true` and `show_debug_table=true`:
+  - Paste **raw** compiler errors/warnings verbatim (if any).
+  - Paste **raw** runtime warnings verbatim (if any).
+  - Attach screenshots with debug table + debug label visible.
+  - Note latest "diag last" lines from debug table (last gating reasons).
+- Then rerun with `debug_mode=false` and append screenshots/notes if visuals still look sparse.
+- Keep all new entries append-only in this file with UTC timestamps.
