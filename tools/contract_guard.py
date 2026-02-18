@@ -5,6 +5,7 @@ import argparse
 import difflib
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -168,16 +169,22 @@ def run_init() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Guard Pine public contract (indicator/inputs/alerts).")
     parser.add_argument("--init", action="store_true", help="Rebuild contract lock from current Pine file")
-    parser.add_argument("--check", action="store_true", help="Check current Pine file against lock (default)")
-    parser.add_argument("--dev-check", action="store_true", help="DEV mode: report contract changes and require docs updates")
+    parser.add_argument("--check", action="store_true", help="Run check in selected mode (default action)")
+    parser.add_argument(
+        "--mode",
+        choices=("dev", "release"),
+        default=os.environ.get("CONTRACT_MODE", "dev"),
+        help="Contract guard mode: dev (report+docs guard) or release (strict lock)",
+    )
     parser.add_argument("--max-diff-lines", type=int, default=20, help="Max diff lines per block")
     args = parser.parse_args()
 
     if args.init:
         return run_init()
-    if args.dev_check:
-        return run_dev_check(max_lines=args.max_diff_lines)
-    return run_check(max_lines=args.max_diff_lines)
+
+    if args.mode == "release":
+        return run_check(max_lines=args.max_diff_lines)
+    return run_dev_check(max_lines=args.max_diff_lines)
 
 
 if __name__ == "__main__":

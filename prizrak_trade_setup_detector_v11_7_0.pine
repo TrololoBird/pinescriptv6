@@ -197,7 +197,7 @@ f_line_styled(line _ln, int _x1, float _y1, int _x2, float _y2, color _c, int _w
         line.set_style(out, _st)
     out
 
-f_label(label _lb, int _x, float _y, string _txt, string _style, color _bg, color _tc, string _sz) =>
+f_label(label _lb, int _x, float _y, string _txt, int _style, color _bg, color _tc, string _sz) =>
     label out = _lb
     if na(out)
         out := label.new(_x, _y, _txt, style=_style, color=_bg, textcolor=_tc, size=_sz)
@@ -909,7 +909,7 @@ if not clean_mode and trap_up_icon
 if not clean_mode and trap_down_icon
     trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", target_preset ? trap_dn_style : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
 if not clean_mode and choch_icon
-    string choch_style = label.style_label_left
+    int choch_style = label.style_label_left
     if target_preset
         if choch_kind == 2
             choch_style := choch_up_style
