@@ -161,7 +161,9 @@ f_clamp_bar_x(int x) => f_clamp_int(x, bar_index - 500, bar_index + 500)
 f_bar_time_from_index(int x) =>
     int off = bar_index - x
     int offClamped = math.max(off, 0)
-    offClamped <= bar_index ? time[offClamped] : time[bar_index]
+    int maxHistory = math.min(bar_index, 5000)
+    int offSafe = math.min(offClamped, maxHistory)
+    time[offSafe]
 
 f_box(box _bx, int _x1, float _y1, int _x2, float _y2, color _bg, color _bd, int _bw) =>
     box out = _bx
