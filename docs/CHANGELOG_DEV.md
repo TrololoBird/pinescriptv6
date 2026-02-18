@@ -2,6 +2,16 @@
 
 ## 2026-02-18
 
+- Added STF+HTF trend separation for setup direction and trap context:
+  - New `stf` timeframe input for higher-level direction alignment.
+  - Setup gating now requires HTF+STF directional agreement unless counter-trend is explicitly allowed.
+- Hardened PP TRUE confirmation in DEV mode:
+  - Added configurable `PP confirm bars` and `PP volume >= MA *` checks before promoting pending PP to active TRUE.
+- Improved trap detector quality in DEV mode:
+  - Added optional `Trap: нужен TF mismatch` gate so trap events require trend mismatch context (HTF/STF vs local break).
+- Adjusted RR/SL placement to be level-anchored and volatility-aware:
+  - Entries now anchor to `working_level` when available (instead of raw close-only anchoring).
+  - Added `Min SL ATR mult` floor so stop distance respects minimum ATR risk width.
 - Added `docs/TV_FEEDBACK.md` as the single TradingView feedback artifact (compiler/runtime/screenshots/notes).
 - Switched contract guard flow to DEV-by-default vs RELEASE opt-in:
   - `make check` now aliases `make check-dev`.
