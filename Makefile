@@ -1,16 +1,20 @@
-.PHONY: check check-dev contract-check contract-dev lint style-check contract-init tv-export
+.PHONY: check check-dev check-release contract-check contract-dev contract-release lint style-check contract-init tv-export
 
-check:
-	python tools/contract_guard.py --check && python tools/lint_guard.py
+check: check-dev
 
 check-dev:
-	python tools/contract_guard.py --dev-check && python tools/lint_guard.py --dev
+	python tools/contract_guard.py --mode dev --check && python tools/lint_guard.py --dev
+
+check-release:
+	python tools/contract_guard.py --mode release --check && python tools/lint_guard.py
 
 contract-dev:
-	python tools/contract_guard.py --dev-check
+	python tools/contract_guard.py --mode dev --check
 
-contract-check:
-	python tools/contract_guard.py --check
+contract-release:
+	python tools/contract_guard.py --mode release --check
+
+contract-check: contract-release
 
 lint:
 	python tools/lint_guard.py

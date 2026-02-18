@@ -15,7 +15,7 @@ RAW_COLOR_RE = re.compile(
     r"\bcolor\.(red|green|blue|black|white|yellow|gray|grey|orange|purple|teal|fuchsia|aqua|lime|maroon|navy|olive|silver)\b"
 )
 FORBIDDEN_TUPLE_COLON_ASSIGN_RE = re.compile(r"\[[^\]]+\]\s*:=")
-BAD_LABEL_STYLE_INT_RE = re.compile(r"\bint\s+[A-Za-z_]\w*style[A-Za-z_\d]*\s*=\s*label\.style_")
+FORBIDDEN_LABEL_STYLE_TYPE_RE = re.compile(r"\blabel\.style\s+[A-Za-z_]\w*")
 NAMED_ASSIGN_IN_CALL_RE = re.compile(r"\([^\n)]*\b[A-Za-z_]\w*\s*:=")
 
 
@@ -98,11 +98,11 @@ def main() -> int:
             + details
         )
 
-    # 1c) label.style_* constants are const string, not int
-    bad_label_style_int_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if BAD_LABEL_STYLE_INT_RE.search(ln)]
-    if bad_label_style_int_hits:
-        details = "; ".join([f"line {i}: {txt}" for i, txt in bad_label_style_int_hits[:10]])
-        fail("label.style_* is const string; use string type instead of int for style variables. " + details)
+    # 1c) Pine does not support label.style as a type annotation
+    bad_label_style_type_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_LABEL_STYLE_TYPE_RE.search(ln)]
+    if bad_label_style_type_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in bad_label_style_type_hits[:10]])
+        fail("Forbidden label.style type annotation. Use int or inferred type with label.style_* constants. " + details)
 
     # 1d) named-argument style assignment ':=' inside function calls is invalid in Pine
     named_assign_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if NAMED_ASSIGN_IN_CALL_RE.search(ln)]

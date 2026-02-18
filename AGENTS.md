@@ -5,13 +5,15 @@
 - Do not change it unless the task explicitly requires Pine edits.
 
 ## Interface contract rules
-- Public interface is locked: `indicator(...)`, all `input.*` declarations (`name = input...`), and all `alertcondition(...)` lines.
+- Public interface modes:
+  - DEV (default): interface drift is allowed when intentional, but must be documented in `docs/COURSE_LOGIC_SPEC.md` or `docs/CHANGELOG_DEV.md`.
+  - RELEASE (opt-in): strict lock enforcement for `indicator(...)`, all `input.*` declarations (`name = input...`), and all `alertcondition(...)` lines.
 - DEV loop: run `make check-dev` while iterating on implementation/runtime stability.
-- PROD/pre-merge gate: run `make check` (contract + lint).
+- RELEASE/pre-merge gate: run `make check-release`.
 - Contract checks:
-  - `make contract-check` validates the Pine interface against `contract.lock.json`.
-  - `make contract-init` refreshes lock file **only for intentional contract updates**.
-- Do not add new inputs or modify alertconditions without explicit request.
+  - `make contract-dev` runs the DEV contract drift report/guard.
+  - `make contract-check` validates the Pine interface against `contract.lock.json` in RELEASE mode.
+  - `make contract-init` refreshes lock file **only for intentional RELEASE contract updates**.
 
 ## Style-only change policy
 - For style-only tasks, only visual tokens are allowed (e.g. color/opacity/width/style/size/textcolor/border fields).
