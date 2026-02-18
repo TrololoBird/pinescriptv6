@@ -14,10 +14,8 @@ SECTION_HEADER_RE = re.compile(r"^//\s*(={3,}|STATE\b|CORE\b|MODULES\b)")
 RAW_COLOR_RE = re.compile(
     r"\bcolor\.(red|green|blue|black|white|yellow|gray|grey|orange|purple|teal|fuchsia|aqua|lime|maroon|navy|olive|silver)\b"
 )
-FORBIDDEN_RR_OPEN_EQ_RE = re.compile(
-    r"^\s*\[\s*rr_open_stop_box\s*,\s*rr_open_take_box\s*,\s*rr_open_take2_box\s*,\s*rr_open_entry_line\s*,\s*rr_open_stat_label\s*\]\s*="
-)
-FORBIDDEN_RR_HIST_EQ_RE = re.compile(r"^\s*\[\s*sb\s*,\s*tb\s*,\s*t2\s*,\s*el\s*,\s*slb\s*\]\s*=")
+FORBIDDEN_TUPLE_COLON_ASSIGN_RE = re.compile(r"\[[^\]]+\]\s*:=")
+BAD_LABEL_STYLE_INT_RE = re.compile(r"\bint\s+[A-Za-z_]\w*style[A-Za-z_\d]*\s*=\s*label\.style_")
 NAMED_ASSIGN_IN_CALL_RE = re.compile(r"\([^\n)]*\b[A-Za-z_]\w*\s*:=")
 
 
@@ -91,24 +89,22 @@ def main() -> int:
         details = "; ".join([f"line {i}: {txt}" for i, txt in na_hits[:10]])
         fail(f"Forbidden comparison with na detected by regex {NA_COMPARE_RE.pattern}: {details}")
 
-    # 1b) known RR handle destructuring must not use '=' (causes shadow/redefine regressions)
-    rr_open_eq_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_RR_OPEN_EQ_RE.search(ln)]
-    if rr_open_eq_hits:
-        details = "; ".join([f"line {i}: {txt}" for i, txt in rr_open_eq_hits[:10]])
+    # 1b) tuple destructuring must use '=' in Pine (':=' is invalid syntax)
+    tuple_colon_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_TUPLE_COLON_ASSIGN_RE.search(ln)]
+    if tuple_colon_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in tuple_colon_hits[:10]])
         fail(
-            "Forbidden destructuring with '=' for rr_open_* handles; use ':=' to reuse declared vars. "
+            "Forbidden tuple destructuring with ':='. Use '=' for tuple unpacking, then assign to persistent vars with ':=' if needed. "
             + details
         )
 
-    rr_hist_eq_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if FORBIDDEN_RR_HIST_EQ_RE.search(ln)]
-    if rr_hist_eq_hits:
-        details = "; ".join([f"line {i}: {txt}" for i, txt in rr_hist_eq_hits[:10]])
-        fail(
-            "Forbidden destructuring with '=' for sb/tb/t2/el/slb handles; use ':=' to reuse declared vars. "
-            + details
-        )
+    # 1c) label.style_* constants are const string, not int
+    bad_label_style_int_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if BAD_LABEL_STYLE_INT_RE.search(ln)]
+    if bad_label_style_int_hits:
+        details = "; ".join([f"line {i}: {txt}" for i, txt in bad_label_style_int_hits[:10]])
+        fail("label.style_* is const string; use string type instead of int for style variables. " + details)
 
-    # 1c) named-argument style assignment ':=' inside function calls is invalid in Pine
+    # 1d) named-argument style assignment ':=' inside function calls is invalid in Pine
     named_assign_hits = [(i, ln.strip()) for i, ln in enumerate(lines, 1) if NAMED_ASSIGN_IN_CALL_RE.search(ln)]
     if named_assign_hits:
         details = "; ".join([f"line {i}: {txt}" for i, txt in named_assign_hits[:10]])
@@ -118,7 +114,7 @@ def main() -> int:
             + details
         )
 
-    # 1d) cap declarations must appear before first use in helpers
+    # 1e) cap declarations must appear before first use in helpers
     poc_bins_decl = _line_index(lines, re.compile(r"^\s*int\s+poc_bins_cap\s*=\s*"))
     poc_bins_use = _line_index(lines, re.compile(r"\bpoc_bins_cap\b"))
     if poc_bins_decl is None:
