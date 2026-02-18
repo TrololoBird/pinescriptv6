@@ -46,3 +46,21 @@
 - Added DEV object-budget warning heuristic in `tools/lint_guard.py`.
 - Updated PP/legacy-CHOCH UI naming in canonical Pine inputs/alerts and added alias layer (`pp_*` -> `choch_*`) for readability without runtime behavior redesign.
 - Reduced debug series to compact compile-first markers (6 plots) while keeping `barstate.islast` table updates.
+
+## 2026-02-18 (strict-compat stabilization pass)
+
+- Synced `prizrak_trade_setup_detector_v11_7_0.pine` public interface back to `contract.lock.json` by removing DEV-only extra inputs and replacing them with internal constants (`TRAP_NEED_TF_MISMATCH`, `STF_TF`, `PP_CONFIRM_BARS`, `PP_CONFIRM_VOL_MULT`, `SL_MIN_ATR_MULT`).
+- Fixed helper typing safety for TradingView enum styles/sizes:
+  - `f_line_styled` and `f_label` no longer use string-typed style/size params.
+- Updated working level selection to nearest active POC to current `close` (excluding dead POC by `poc_dead_tests`) instead of “last active POC”.
+- Reworked trap break registration to use crossover/crossunder on working level + volume gate + HTF alignment (`up` only when `htf_trend_dir <= 0`, `down` only when `htf_trend_dir >= 0`).
+- Aligned PP strict-compat behavior:
+  - TRUE (kinds 2/4) requires retest when `choch_need_retest=true`.
+  - EARLY (kinds 1/3) can proceed without retest.
+  - Active/pending/confirm-alive PP now blocks both BUY and SELL setups.
+- Hardened RR gate quality computation to be explicitly based on TP main/ext distances from entry (not TP1-only shortcut).
+- Added mandatory level zone layer around working level as update-in-place single box (clean mode uses higher transparency).
+- Kept mandatory visuals available in clean mode for baseline parity (working level, POC lines, RR history, level zone).
+
+### Intentional deviations / notes
+- STF branch remains runtime-enabled but uses fixed internal timeframe constant (`STF_TF = "D"`) to preserve strict public contract compatibility.
