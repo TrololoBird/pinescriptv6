@@ -273,3 +273,27 @@ When `debug_mode=true` and `show_debug_table=true`, debug table reports module-l
 - PP: state text/code + pending dir + confirm count.
 - HTF: trend dir + previous/latest pivot pairs.
 - RR: gate/quality + requested/effective history keep and budget caps.
+
+## 2026-02-19 — v12 product UX (zones → stages → entry)
+
+### Flow overview
+- v12 is built around a top-down MTF flow: HTF zones define context, LTF zone refines execution, stage machine drives operator actions.
+- Active zone is selected as closest valid zone with bias-aware preference (BUY bias prefers demand, SELL bias prefers supply).
+- Stage progression:
+  1. **FAR**: price is away from active zone.
+  2. **NEAR**: price within ATR-based threshold (`near_thr_atr`) → prepare direction.
+  3. **IN_ZONE**: close enters active zone bounds.
+  4. **CONFIRM**: enabled confirms pass (PP/CHOCH, trap-return, RSI/MACD, RR gate).
+  5. **ENTRY**: confirmation + trigger breakout of local micro-structure.
+  6. **BLOCKED**: inside zone but confirm stack fails; HUD exposes reason.
+
+### MTF auto hierarchy
+- `chart <= 15m`: `HTF1=4H`, `HTF2=1H`, `LTF=chart`.
+- `chart = 30m/1H`: `HTF1=1D`, `HTF2=4H`, `LTF=chart`.
+- `chart >= 4H`: `HTF1=1W`, `HTF2=1D`, `LTF=chart`.
+- Manual mode allows explicit TF override.
+
+### Zone model
+- HTF supply/demand is built from pivots with ATR padding.
+- Zones are boxed, extended to the right, lifecycle-managed (touch/age/invalidation), and capped per TF+type for object safety.
+- LTF entry zone supports `POC` (VWMA-centric ATR zone) or `ACCUM` (validated local flat range).
