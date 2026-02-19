@@ -168,11 +168,17 @@ f_bar_time_from_index(int x) =>
     if na(x)
         time
     else
-        int off = bar_index - x
-        int offClamped = math.max(off, 0)
-        int maxHistory = math.min(bar_index, 5000)
-        int offSafe = math.min(offClamped, maxHistory)
-        time[offSafe]
+        if x <= bar_index
+            int off = bar_index - x
+            int offClamped = math.max(off, 0)
+            int maxHistory = math.min(bar_index, 5000)
+            int offSafe = math.min(offClamped, maxHistory)
+            time[offSafe]
+        else
+            int dt = bar_index > 0 ? (time - time[1]) : 0
+            if dt <= 0
+                dt := timeframe.in_seconds() > 0 ? timeframe.in_seconds() * 1000 : 60000
+            time + dt * (x - bar_index)
 
 f_box(box _bx, int _x1, float _y1, int _x2, float _y2, color _bg, color _bd, int _bw) =>
     box out = _bx
@@ -381,6 +387,7 @@ var bool last_flat_valid = false
 var array<float> poc_prices = array.new_float()
 var array<int> poc_bars = array.new_int()
 var array<int> poc_tests = array.new_int()
+var array<bool> poc_in_touch = array.new_bool()
 
 var bool in_stop = false
 var int stop_start = na
@@ -473,6 +480,12 @@ var int dbg_pp_state_log = na
 var int dbg_setup_state = na
 var int dbg_visual_state = na
 
+const int SETUP_COOLDOWN_BARS = 3
+var float last_setup_level = na
+var int last_setup_dir = 0
+var int last_setup_bar = na
+var bool setup_armed = true
+
 int internal_poc_keep = math.max(1, int(math.floor(max_poc_keep * 0.8)))
 int rr_boxes_per_trade = 3
 int rr_lines_per_trade = 1
@@ -564,14 +577,17 @@ if in_flat
                 array.push(poc_prices, fpoc)
                 array.push(poc_bars, bar_index)
                 array.push(poc_tests, 0)
+                array.push(poc_in_touch, false)
                 if array.size(poc_prices) > internal_poc_keep
                     array.shift(poc_prices)
                     array.shift(poc_bars)
                     array.shift(poc_tests)
+                    array.shift(poc_in_touch)
                 while array.size(poc_prices) > math.max(internal_poc_keep, 1)
                     array.shift(poc_prices)
                     array.shift(poc_bars)
                     array.shift(poc_tests)
+                    array.shift(poc_in_touch)
             else if debug_mode and barstate.islast
                 f_dbg_push("POC:skip na/empty window")
         last_flat_high := flat_high
@@ -636,14 +652,17 @@ if in_stop
                 array.push(poc_prices, sv_poc)
                 array.push(poc_bars, bar_index)
                 array.push(poc_tests, 0)
+                array.push(poc_in_touch, false)
                 if array.size(poc_prices) > internal_poc_keep
                     array.shift(poc_prices)
                     array.shift(poc_bars)
                     array.shift(poc_tests)
+                    array.shift(poc_in_touch)
                 while array.size(poc_prices) > math.max(internal_poc_keep, 1)
                     array.shift(poc_prices)
                     array.shift(poc_bars)
                     array.shift(poc_tests)
+                    array.shift(poc_in_touch)
             else if debug_mode and barstate.islast
                 f_dbg_push("POC:stop na/empty")
         in_stop := false
@@ -841,14 +860,16 @@ if enable_poc and array.size(poc_prices) > 0
     for i = 0 to array.size(poc_prices) - 1
         lvl = array.get(poc_prices, i)
         tests = array.get(poc_tests, i)
+        bool in_touch = array.get(poc_in_touch, i)
         if bar_index > array.get(poc_bars, i)
             hiTol = lvl * (1 + poc_test_tolerance)
             loTol = lvl * (1 - poc_test_tolerance)
             touched = high >= loTol and low <= hiTol
-            if touched
+            if touched and not in_touch
                 array.set(poc_tests, i, tests + 1)
+            array.set(poc_in_touch, i, touched)
 
-int poc_diag_state = not enable_poc ? -4 : array.size(poc_prices) == 0 ? -3 : array.size(poc_prices) > 0 and array.size(poc_prices) == array.size(poc_tests) ? 1 : -2
+int poc_diag_state = not enable_poc ? -4 : array.size(poc_prices) == 0 ? -3 : (array.size(poc_prices) > 0 and array.size(poc_prices) == array.size(poc_tests) and array.size(poc_prices) == array.size(poc_in_touch)) ? 1 : -2
 if debug_mode and barstate.islast and poc_diag_state != dbg_poc_state
     if poc_diag_state == -4
         f_dbg_push("POC:off enable=0")
@@ -860,21 +881,31 @@ if debug_mode and barstate.islast and poc_diag_state != dbg_poc_state
         f_dbg_push("POC:levels=" + str.tostring(array.size(poc_prices)))
     dbg_poc_state := poc_diag_state
 
-float working_level = na
-float working_level_dist = na
+float wl_now = na
+float wl_now_dist = na
+float wl_prev = na
+float wl_prev_dist = na
 if array.size(poc_prices) > 0
     for i = 0 to array.size(poc_prices) - 1
         if array.get(poc_tests, i) < poc_dead_tests
             float lvl = array.get(poc_prices, i)
-            float lvl_dist = math.abs(close - lvl)
-            if na(working_level_dist) or lvl_dist < working_level_dist
-                working_level := lvl
-                working_level_dist := lvl_dist
+            float dist_now = math.abs(close - lvl)
+            float dist_prev = math.abs(close[1] - lvl)
+            if na(wl_now_dist) or dist_now < wl_now_dist
+                wl_now := lvl
+                wl_now_dist := dist_now
+            if na(wl_prev_dist) or dist_prev < wl_prev_dist
+                wl_prev := lvl
+                wl_prev_dist := dist_prev
+
+float working_level = wl_now
 if debug_mode and barstate.islast and na(working_level)
     f_dbg_push("POC:block no_active_poc")
 
-bool work_cross_up = not na(working_level) and close > working_level and close[1] <= working_level
-bool work_cross_dn = not na(working_level) and close < working_level and close[1] >= working_level
+float wl_eps = not na(wl_now) ? math.max(syminfo.mintick, math.abs(wl_now) * poc_test_tolerance * 0.5) : syminfo.mintick
+bool wl_stable = not na(wl_now) and not na(wl_prev) and math.abs(wl_now - wl_prev) <= wl_eps
+bool work_cross_up = wl_stable and close > wl_now and close[1] <= wl_prev
+bool work_cross_dn = wl_stable and close < wl_now and close[1] >= wl_prev
 
 if enable_traps and not na(working_level)
     bool vol_break_ok = not trap_use_volume or volume > vol_ma * 1.2
@@ -948,7 +979,15 @@ bull_ok = not enable_filters or ((hidden_bull or classic_bull or macd_bull) and 
 bear_ok = not enable_filters or ((hidden_bear or classic_bear or macd_bear) and not hidden_bull and not classic_bull and not macd_bull)
 
 float atr_ref = atr
+float zone_half = not na(working_level) ? math.max(math.abs(working_level) * poc_test_tolerance, atr * 0.10) : na
 near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref * test_atr_frac : false
+bool level_changed = not na(last_setup_level) and not na(working_level) and math.abs(working_level - last_setup_level) > syminfo.mintick
+if not setup_armed
+    float escape = not na(zone_half) ? math.max(atr * test_atr_frac, zone_half) : atr * test_atr_frac
+    bool escaped_from_level = na(last_setup_level) or math.abs(close - last_setup_level) > escape
+    setup_armed := escaped_from_level or na(working_level) or level_changed
+bool cooldown_passed = na(last_setup_bar) or (bar_index - last_setup_bar) >= SETUP_COOLDOWN_BARS
+bool setup_gate_ok = setup_armed and cooldown_passed
 bool htf_buy_priority = htf_trend_dir == 1
 bool htf_sell_priority = htf_trend_dir == -1
 bool htf_neutral = htf_trend_dir == 0
@@ -988,8 +1027,14 @@ if buy_setup_base or sell_setup_base
 buy_setup = buy_setup_base and (not rr_gate_enabled or rr_ok_buy)
 sell_setup = sell_setup_base and (not rr_gate_enabled or rr_ok_sell)
 
-open_buy = buy_setup
-open_sell = sell_setup
+open_buy = buy_setup and setup_gate_ok
+open_sell = sell_setup and setup_gate_ok
+
+if open_buy or open_sell
+    last_setup_level := working_level
+    last_setup_dir := open_buy ? 1 : -1
+    last_setup_bar := bar_index
+    setup_armed := false
 int setup_diag_state = na(working_level) ? -6 : ((pp_block_buy and work_cross_up) or (pp_block_sell and work_cross_dn)) ? -5 : (not work_cross_up and not work_cross_dn) ? -4 : ((work_cross_up and not buy_dir_ok) or (work_cross_dn and not sell_dir_ok)) ? -3 : ((work_cross_up and not bull_ok) or (work_cross_dn and not bear_ok)) ? -2 : not near_level ? -1 : ((buy_setup_base and rr_gate_enabled and not rr_ok_buy) or (sell_setup_base and rr_gate_enabled and not rr_ok_sell)) ? 0 : (buy_setup or sell_setup) ? 2 : 1
 if debug_mode and barstate.islast and setup_diag_state != dbg_setup_state
     if setup_diag_state == -6
@@ -1113,9 +1158,9 @@ var label wll = na
 var box wl_zone = na
 if show_working_lvl and not na(working_level)
     wl := f_line_styled(wl, bar_index - 100, working_level, bar_index, working_level, skin_working_line_col, skin_line_w, line.style_arrow_right)
-    float zone_half = math.max(math.abs(working_level) * poc_test_tolerance, atr * 0.10)
+    float zone_half_vis = math.max(math.abs(working_level) * poc_test_tolerance, atr * 0.10)
     color zone_bg = clean_mode ? color.new(skin_working_line_col, 94) : color.new(skin_working_line_col, 88)
-    wl_zone := f_box_norm(wl_zone, bar_index - 100, working_level + zone_half, bar_index, working_level - zone_half, zone_bg, color.new(skin_working_line_col, 75), 1)
+    wl_zone := f_box_norm(wl_zone, bar_index - 100, working_level + zone_half_vis, bar_index, working_level - zone_half_vis, zone_bg, color.new(skin_working_line_col, 75), 1)
     if not clean_mode
         wll := f_label(wll, bar_index + 2, working_level, "POC " + f_fmt(working_level), label.style_label_left, skin_poc_fill, f_contrast_text(skin_poc_fill), skin_label_size)
     else
@@ -1388,15 +1433,15 @@ else
         dbg_lbl := na
 
 plot(debug_mode ? debug_flat_mid : na, "DBG Flat Mid", color=skin_working_line_col, linewidth=1, style=plot.style_line)
-plot(debug_mode ? (flat_valid_now ? 1 : 0) : na, "DBG Flat Detected", color=skin_poc_line, linewidth=1, style=plot.style_columns)
+plot(debug_mode ? (flat_valid_now ? 1 : 0) : na, "DBG Flat Detected", color=skin_poc_line, linewidth=1, style=plot.style_columns, display=display.data_window)
 plot(debug_mode ? debug_poc_level : na, "DBG POC Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
 plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
-plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_stepline)
-plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_stepline)
-plot(debug_mode ? debug_stf_trend_dir : na, "DBG STF Trend Dir", color=skin_poc_line, linewidth=1, style=plot.style_stepline)
-plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flag", color=skin_trap_col, linewidth=2, style=plot.style_histogram)
-plot(debug_mode ? debug_rr_quality : na, "DBG RR Quality", color=skin_take_fill, linewidth=1, style=plot.style_line)
-plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns)
+plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_stepline, display=display.data_window)
+plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_stepline, display=display.data_window)
+plot(debug_mode ? debug_stf_trend_dir : na, "DBG STF Trend Dir", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.data_window)
+plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flag", color=skin_trap_col, linewidth=2, style=plot.style_histogram, display=display.data_window)
+plot(debug_mode ? debug_rr_quality : na, "DBG RR Quality", color=skin_take_fill, linewidth=1, style=plot.style_line, display=display.data_window)
+plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns, display=display.data_window)
 plot(debug_mode ? flat_diag_state : na, "DBG Flat State Code", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
 plot(debug_mode ? debug_working_tests : na, "DBG POC Working Tests", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
 plot(debug_mode ? (stop_volume_event ? 1 : 0) : na, "DBG SV Event", color=skin_stop_line_col, linewidth=1, style=plot.style_columns, display=display.none)
