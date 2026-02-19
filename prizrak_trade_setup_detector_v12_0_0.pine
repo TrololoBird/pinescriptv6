@@ -553,8 +553,8 @@ if has_active
         next_action := "Watch confirm"
         if rr_ok and pp_ok and trap_ok and osc_ok
             stage := STAGE_CONFIRM
-            ready_reason_code := trap_ok ? "TRAP OK" : "TRAP WAIT"
-            ready_reason_text := trap_ok ? "TRAP OK; waiting breakout trigger" : "TRAP WAIT"
+            ready_reason_code := "ALL_FILTERS_OK"
+            ready_reason_text := "All confirms passed; waiting breakout trigger"
             next_action := "Wait entry trigger"
             if trig_ok
                 stage := STAGE_ENTRY
@@ -653,7 +653,7 @@ if allow_ltf or ltf_fallback
             box.set_top(ltf_box, l_top)
             box.set_bottom(ltf_box, l_bot)
             if not na(ltf_label)
-                label.set_x(ltf_label, time)
+                label.set_x(ltf_label, ltf_left_time)
                 label.set_y(ltf_label, l_top)
                 label.set_text(ltf_label, ltf_fallback ? "ENTRY ZONE " + ltf + " (NO HTF CONTEXT)" : "ENTRY ZONE " + ltf)
     else
@@ -707,7 +707,8 @@ for i = 0 to array.size(z_top) - 1
     box.set_bottom(b, bot)
     box.set_border_width(b, width)
     box.set_border_color(b, is_live ? border : color.new(color.gray, 20))
-    box.set_bgcolor(b, is_live ? (array.get(z_type, i) == 1 ? color.new(color.green, 86) : color.new(color.red, 86)) : color.new(color.gray, 92))
+    int fill_alpha = is_htf1 ? 86 : 90
+    box.set_bgcolor(b, is_live ? (array.get(z_type, i) == 1 ? color.new(color.green, fill_alpha) : color.new(color.red, fill_alpha)) : color.new(color.gray, 92))
     label lb = array.get(z_label, i)
     if not na(lb)
         string t = (array.get(z_type, i) == 1 ? "DEMAND " : "SUPPLY ") + array.get(z_tf, i) + " " + f_zone_status_text(status_i)
