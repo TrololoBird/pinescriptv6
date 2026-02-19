@@ -58,12 +58,12 @@
   },
   "alerts": {
     "count": 13,
-    "sha256": "28ecf69aeec59e697d2ad61056a6d9e832ef6b6a36d931571732ef1642d7ca06",
+    "sha256": "1fac7df182466bb159758795b5fb13dd857cdd8ac93b0869a7385d8f4804daab",
     "lines": [
-      "alertcondition(near_edge and active_type == 1, \"price_near_buy_zone\", \"Stage change FAR->NEAR BUY\")",
-      "alertcondition(near_edge and active_type == -1, \"price_near_sell_zone\", \"Stage change FAR->NEAR SELL\")",
-      "alertcondition(in_zone_edge and active_type == 1, \"price_in_buy_zone\", \"Stage change NEAR->IN_ZONE BUY\")",
-      "alertcondition(in_zone_edge and active_type == -1, \"price_in_sell_zone\", \"Stage change NEAR->IN_ZONE SELL\")",
+      "alertcondition(near_edge and active_type == 1, \"price_near_buy_zone\", \"Price NEAR BUY zone\")",
+      "alertcondition(near_edge and active_type == -1, \"price_near_sell_zone\", \"Price NEAR SELL zone\")",
+      "alertcondition(in_zone_edge and active_type == 1, \"price_in_buy_zone\", \"Price entered BUY zone\")",
+      "alertcondition(in_zone_edge and active_type == -1, \"price_in_sell_zone\", \"Price entered SELL zone\")",
       "alertcondition(entry_edge and entry_buy_sig, \"entry_buy\", \"ENTRY BUY on stage transition\")",
       "alertcondition(entry_edge and entry_sell_sig, \"entry_sell\", \"ENTRY SELL on stage transition\")",
       "alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_buy_sig, \"blocked_buy\", \"BUY blocked on stage transition\")",
