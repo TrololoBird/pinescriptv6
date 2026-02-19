@@ -82,3 +82,24 @@
 - Switched setup flow to base-setup + RR-gated final setup states to keep diagnostics explicit.
 - Preserved release contract parity and lock stability (`contract.lock.json` untouched).
 - Revalidated full required gate set: `make check-release`, `make contract-check`, `make lint`, `make check-dev`, `make tv-export`.
+
+## 2026-02-19 — strict-compat hardening pass (stable interface preserved)
+
+### Core logic hardening
+- Break/trap logic anchored to `last_break_level`: break registration now snapshots the exact `working_level` that was broken and trap-return is evaluated against this frozen level, not the potentially shifted nearest-POC on later bars.
+- Dynamic `working_level` cross hardening: replaced `ta.crossover/ta.crossunder` usage for working-level events with explicit close-to-level transition checks (`close > level and close[1] <= level`, mirrored for down).
+- Break registration gates remain at the break moment (volume gate + HTF alignment):
+  - up-break only when `htf_trend_dir <= 0`
+  - down-break only when `htf_trend_dir >= 0`
+- TF mismatch gate is applied at break registration only; no second mismatch gate at trap-return (intentional alignment with COURSE_LOGIC_SPEC strict-compat semantics).
+
+### Safety / runtime robustness
+- RR gate na/zero safety tightened: when computed risk is non-positive, `rr_quality_*` remains `na` and `rr_ok_*` is forced false; with `rr_gate_enabled=true`, such setups are blocked without division-by-zero risk.
+
+### Visual/UI improvements (no signal-condition drift)
+- Event icons switched from single mutable marker to bounded history arrays (`ICON_KEEP=20`) for trap-up/trap-down/PP labels with automatic pruning.
+- `clean_mode` explicitly purges icon arrays to prevent object accumulation.
+- Palette tweaks toward architecture visual hierarchy:
+  - buy fill -> green-based
+  - sell fill -> red-based
+  - PP/CHOCH marker -> purple

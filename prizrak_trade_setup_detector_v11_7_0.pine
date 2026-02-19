@@ -127,8 +127,8 @@ line_w_eff = target_preset ? 2 : 3
 border_w_eff = target_preset ? 2 : 1
 label_sz_eff = target_preset ? size.normal : size.small
 
-skin_buy_fill = color.new(color.teal, zone_opacity_eff)
-skin_sell_fill = color.new(color.purple, zone_opacity_eff)
+skin_buy_fill = color.new(color.green, zone_opacity_eff)
+skin_sell_fill = color.new(color.red, zone_opacity_eff)
 skin_stop_fill = color.new(color.red, target_preset ? 82 : 85)
 skin_take_fill = color.new(color.green, target_preset ? 82 : 85)
 skin_take2_fill = color.new(color.teal, target_preset ? 84 : 87)
@@ -140,7 +140,7 @@ skin_text_col = color.new(skin_text_base, 0)
 skin_poc_line = color.new(color.yellow, 0)
 skin_dead_line = color.new(color.gray, 75)
 skin_trap_col = color.new(color.orange, 0)
-skin_choch_col = color.new(color.fuchsia, 0)
+skin_choch_col = color.new(color.purple, 0)
 skin_squeeze_col = color.new(color.yellow, 70)
 skin_working_line_col = color.new(color.yellow, 0)
 skin_stop_line_col = f_opaque(skin_stop_fill)
@@ -391,6 +391,7 @@ var bool stop_volume_event = false
 
 var int last_break_bar = na
 var string last_break_dir = ""
+var float last_break_level = na
 
 var bool choch_active = false
 var int choch_kind = 0
@@ -872,10 +873,8 @@ if array.size(poc_prices) > 0
 if debug_mode and barstate.islast and na(working_level)
     f_dbg_push("POC:block no_active_poc")
 
-bool work_cross_up_raw = ta.crossover(close, working_level)
-bool work_cross_dn_raw = ta.crossunder(close, working_level)
-bool work_cross_up = not na(working_level) and work_cross_up_raw
-bool work_cross_dn = not na(working_level) and work_cross_dn_raw
+bool work_cross_up = not na(working_level) and close > working_level and close[1] <= working_level
+bool work_cross_dn = not na(working_level) and close < working_level and close[1] >= working_level
 
 if enable_traps and not na(working_level)
     bool vol_break_ok = not trap_use_volume or volume > vol_ma * 1.2
@@ -886,24 +885,22 @@ if enable_traps and not na(working_level)
     if brk_up
         last_break_bar := bar_index
         last_break_dir := "up"
+        last_break_level := working_level
     if brk_dn
         last_break_bar := bar_index
         last_break_dir := "down"
+        last_break_level := working_level
 bool trap_up = false
 bool trap_down = false
 int trap_flag = 0
-bool tf_mismatch_up = htf_trend_dir <= 0
-bool tf_mismatch_down = htf_trend_dir >= 0
-bool trap_tf_ok_up = not TRAP_NEED_TF_MISMATCH or tf_mismatch_up
-bool trap_tf_ok_down = not TRAP_NEED_TF_MISMATCH or tf_mismatch_down
-if not na(last_break_bar) and not na(working_level)
+if not na(last_break_bar) and not na(last_break_level)
     in_window = (bar_index - last_break_bar) <= trap_max_bars
     bool vol_trap_ok = not trap_use_volume or volume < vol_ma * trap_vol_drop
-    trap_up := last_break_dir == "up" and in_window and close < working_level and vol_trap_ok and trap_tf_ok_up
-    trap_down := last_break_dir == "down" and in_window and close > working_level and vol_trap_ok and trap_tf_ok_down
+    trap_up := last_break_dir == "up" and in_window and close < last_break_level and vol_trap_ok
+    trap_down := last_break_dir == "down" and in_window and close > last_break_level and vol_trap_ok
 trap_flag := trap_up ? 1 : trap_down ? -1 : 0
 
-int trap_diag_state = not enable_traps ? -4 : na(working_level) ? -3 : na(last_break_bar) ? -2 : (bar_index - last_break_bar) > trap_max_bars ? -1 : trap_flag != 0 ? 1 : 0
+int trap_diag_state = not enable_traps ? -4 : na(last_break_level) ? -3 : na(last_break_bar) ? -2 : (bar_index - last_break_bar) > trap_max_bars ? -1 : trap_flag != 0 ? 1 : 0
 if debug_mode and barstate.islast and trap_diag_state != dbg_trap_state
     if trap_diag_state == -4
         f_dbg_push("TRAP:off enable=0")
@@ -985,8 +982,8 @@ if buy_setup_base or sell_setup_base
     float rr_ext_sell = risk_sell > 0 ? math.abs(tp_ext_sell - en_sell) / risk_sell : na
     rr_quality_buy := risk_buy > 0 ? math.max(rr_main_buy, rr_ext_buy) : na
     rr_quality_sell := risk_sell > 0 ? math.max(rr_main_sell, rr_ext_sell) : na
-    rr_ok_buy := risk_buy > 0 and rr_quality_buy >= rr_min
-    rr_ok_sell := risk_sell > 0 and rr_quality_sell >= rr_min
+    rr_ok_buy := risk_buy > 0 and not na(rr_quality_buy) and rr_quality_buy >= rr_min
+    rr_ok_sell := risk_sell > 0 and not na(rr_quality_sell) and rr_quality_sell >= rr_min
 
 buy_setup = buy_setup_base and (not rr_gate_enabled or rr_ok_buy)
 sell_setup = sell_setup_base and (not rr_gate_enabled or rr_ok_sell)
@@ -1174,15 +1171,32 @@ if debug_mode and barstate.islast and visual_diag_state != dbg_visual_state
         f_dbg_push("VIS:active")
     dbg_visual_state := visual_diag_state
 
-var label trapUpLabel = na
-var label trapDownLabel = na
-var label chochLabel = na
+const int ICON_KEEP = 20
+var array<label> trapUpLabels = array.new_label()
+var array<label> trapDownLabels = array.new_label()
+var array<label> chochLabels = array.new_label()
+if clean_mode
+    while array.size(trapUpLabels) > 0
+        f_del_label(array.pop(trapUpLabels))
+    while array.size(trapDownLabels) > 0
+        f_del_label(array.pop(trapDownLabels))
+    while array.size(chochLabels) > 0
+        f_del_label(array.pop(chochLabels))
 if not clean_mode and trap_up_icon
-    trapUpLabel := f_label(trapUpLabel, bar_index, low, "🪤", target_preset ? label.style_arrowup : label.style_label_up, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
+    label trap_up_lb = f_label(na, bar_index, low, "🪤", target_preset ? label.style_arrowup : label.style_label_up, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
+    array.push(trapUpLabels, trap_up_lb)
+    while array.size(trapUpLabels) > ICON_KEEP
+        f_del_label(array.shift(trapUpLabels))
 if not clean_mode and trap_down_icon
-    trapDownLabel := f_label(trapDownLabel, bar_index, high, "🪤", target_preset ? label.style_arrowdown : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
+    label trap_down_lb = f_label(na, bar_index, high, "🪤", target_preset ? label.style_arrowdown : label.style_label_down, skin_trap_col, f_contrast_text(skin_trap_col), skin_label_size)
+    array.push(trapDownLabels, trap_down_lb)
+    while array.size(trapDownLabels) > ICON_KEEP
+        f_del_label(array.shift(trapDownLabels))
 if not clean_mode and choch_icon
-    chochLabel := f_label(chochLabel, bar_index, close, "PP", target_preset ? (choch_kind == 2 ? label.style_arrowup : choch_kind == 4 ? label.style_arrowdown : label.style_label_left) : label.style_label_left, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
+    label choch_lb = f_label(na, bar_index, close, "PP", target_preset ? (choch_kind == 2 ? label.style_arrowup : choch_kind == 4 ? label.style_arrowdown : label.style_label_left) : label.style_label_left, skin_choch_col, f_contrast_text(skin_choch_col), skin_label_size)
+    array.push(chochLabels, choch_lb)
+    while array.size(chochLabels) > ICON_KEEP
+        f_del_label(array.shift(chochLabels))
 
 var box rr_open_stop_box = na
 var box rr_open_take_box = na

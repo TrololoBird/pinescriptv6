@@ -160,3 +160,29 @@
   - Verify RR gate blocks setup creation when `rr_quality < rr_min`.
   - Verify level zone remains visible around `working_level` and is more transparent in `clean_mode`.
   - Verify POC lines and RR history remain available in `clean_mode`.
+
+## 2026-02-19 00:00:00Z — Codex post-change TV validation checklist (append-only)
+- Scope of this pass: strict-compat logic hardening with public contract preserved.
+- Export command for this pass: `make tv-export`.
+
+### What to verify in TradingView
+- Symbols/TF matrix:
+  - BTCUSDT 15m
+  - BTCUSDT 1h
+  - AAPL 1D
+- Trap validation focus:
+  - Confirm trap is evaluated relative to break-time level snapshot (no false trap due to nearest-POC level jump after break).
+  - Confirm break registration still respects HTF-only mismatch gate at break moment.
+- Setup cross focus:
+  - Confirm no false setup appears solely because `working_level` jumped between bars while price did not truly cross that level.
+- Visual focus:
+  - Trap and PP icons retain a short history (not just one latest icon).
+  - In `clean_mode=true`, trap/PP icons are not drawn and previously drawn icon history is cleared.
+
+### Artifacts to attach
+- Per chart (BTCUSDT 15m/1h, AAPL 1D):
+  - Raw compiler output (verbatim).
+  - Raw runtime warnings (verbatim).
+  - Screenshot with `debug_mode=true` + `show_debug_table=true`.
+  - Screenshot with `debug_mode=false`.
+- Include notes whether trap happened vs expected break-level anchor behavior.
