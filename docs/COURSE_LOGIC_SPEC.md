@@ -297,3 +297,15 @@ When `debug_mode=true` and `show_debug_table=true`, debug table reports module-l
 - HTF supply/demand is built from pivots with ATR padding.
 - Zones are boxed, extended to the right, lifecycle-managed (touch/age/invalidation), and capped per TF+type for object safety.
 - LTF entry zone supports `POC` (VWMA-centric ATR zone) or `ACCUM` (validated local flat range).
+
+
+## v12 canonical status (2026-02-19)
+
+- Canonical tooling target is `prizrak_trade_setup_detector_v12_0_0.pine`; v11 remains legacy/reference only.
+- v11 core trading modules migrated into v12 runtime:
+  - POC profile engine (volume-by-bin),
+  - Flat/accum touch-state zone logic,
+  - Anchored trap confirm module,
+  - PP strict state machine for confirm+bias,
+  - RR stop/TP model with bounded visual history.
+- UX contract of v12 preserved: stage pipeline, right-extended boxes, HUD, icons, lifecycle alerts.
