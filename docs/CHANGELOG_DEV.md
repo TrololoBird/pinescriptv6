@@ -110,3 +110,30 @@
 - Introduced AUTO/Manual MTF hierarchy inputs, HTF zone engine, LTF entry-zone modes (POC/ACCUM), stage machine (FAR/NEAR/IN_ZONE/CONFIRM/ENTRY/BLOCKED), HUD, and new alert set.
 - Updated toolchain to target v12 as canonical (`tools/contract_guard.py`, `tools/lint_guard.py`, `tools/tv_export.py`).
 - Refreshed `contract.lock.json` to match v12 interface.
+
+## 2026-02-19 — v12.0.0 stability & UX hardening pass
+
+- ENTRY event icons are now emitted on every `stage_changed && stage == ENTRY` edge using `entry_buy_sig/entry_sell_sig`, without dependency on previous stage being `CONFIRM`.
+- Zone lifecycle cleanup hardened:
+  - INVALID and EXPIRED zones are now physically removed (`f_remove_zone`) in reverse-index batch pass.
+  - Prevents stale object accumulation and mitigates `max_boxes_count` exhaustion.
+- Touch counting converted to edge-trigger logic via `z_inside_prev`:
+  - touch increments only on first bar entering zone (`inside_now && !was_inside`).
+  - TOUCHED state is set only on first entry.
+- Zone age semantics switched from chart `bar_index` age to zone-timeframe age:
+  - `age_bars_zone = floor((time - z_pivot_time) / dt_ms(tf))`.
+  - expiration now uses zone-relative age (`age_bars_zone > max_age_bars`).
+- Live zones now extend right edge continuously while ACTIVE/TOUCHED:
+  - per-bar `right = time + dt_ms(tf) * zone_extend_bars` update applied.
+- LTF entry-zone computation moved to true LTF context with one `request.security` call on `ltf`:
+  - returns `atr_ltf`, `poc_candidate` (max-volume bar proxy), `accum_hi`, `accum_lo`.
+  - POC/ACCUM construction now uses these LTF-derived series with `lookahead_off` + `gaps_off`.
+- Added moving active-zone UX label (`active_label`) anchored near current bar/time:
+  - text format: `ACTIVE DEMAND/SUPPLY <TF> | stage=<...> | next=<...>`.
+- Confirm-stage reason semantics split:
+  - introduced `ready_reason_*` for `CONFIRM` waiting state.
+  - `block_reason_*` kept for `BLOCKED` stage; HUD shows block reasons only when stage is BLOCKED.
+- Added optional lifecycle alerts:
+  - `zone_created_demand/supply`
+  - `zone_invalidated_demand/supply`
+- Refreshed `contract.lock.json` to capture intentional alert/interface updates.
