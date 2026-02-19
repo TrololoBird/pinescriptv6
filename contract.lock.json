@@ -57,8 +57,8 @@
     ]
   },
   "alerts": {
-    "count": 12,
-    "sha256": "f5565bd12aed173443058b845027501c0dd7fb4d9db787d99b3aa371180f837a",
+    "count": 13,
+    "sha256": "28ecf69aeec59e697d2ad61056a6d9e832ef6b6a36d931571732ef1642d7ca06",
     "lines": [
       "alertcondition(near_edge and active_type == 1, \"price_near_buy_zone\", \"Stage change FAR->NEAR BUY\")",
       "alertcondition(near_edge and active_type == -1, \"price_near_sell_zone\", \"Stage change FAR->NEAR SELL\")",
@@ -66,8 +66,9 @@
       "alertcondition(in_zone_edge and active_type == -1, \"price_in_sell_zone\", \"Stage change NEAR->IN_ZONE SELL\")",
       "alertcondition(entry_edge and entry_buy_sig, \"entry_buy\", \"ENTRY BUY on stage transition\")",
       "alertcondition(entry_edge and entry_sell_sig, \"entry_sell\", \"ENTRY SELL on stage transition\")",
-      "alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_buy_sig, \"blocked_buy\", \"BUY blocked on stage transition\")",
-      "alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_sell_sig, \"blocked_sell\", \"SELL blocked on stage transition\")",
+      "alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_buy_sig, \"blocked_buy\", \"BUY blocked on stage transition\")",
+      "alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_sell_sig, \"blocked_sell\", \"SELL blocked on stage transition\")",
+      "alertcondition(zone_changed and has_active, \"active_zone_changed\", \"Active zone changed\")",
       "alertcondition(zone_created_demand, \"zone_created_demand\", \"DEMAND zone created\")",
       "alertcondition(zone_created_supply, \"zone_created_supply\", \"SUPPLY zone created\")",
       "alertcondition(zone_invalidated_demand, \"zone_invalidated_demand\", \"DEMAND zone invalidated\")",
