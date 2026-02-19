@@ -204,3 +204,40 @@
 - HTF rendering rank tuned to 3 levels:
   - HTF1 strongest, HTF2 medium, others weakest (`fill_alpha`/width differentiation).
 - Refreshed `contract.lock.json` for intentional interface/alert additions.
+
+## 2026-02-19 — v12.1.0 baseline audit + full MTF pipeline rewrite
+
+### Baseline audit (before edits)
+- Canonical file at start: `prizrak_trade_setup_detector_v12_0_0.pine`.
+- Baseline size: `wc -l` = **821** lines.
+- Baseline public contract: **49** `input.*` declarations and **15** `alertcondition(...)` declarations.
+- Baseline TF controls: `manual_htf1=240`, `manual_htf2=60`, `manual_ltf(blank=chart)`, `auto_ltf_mode` with `AUTO_BY_CHART/AUTO_BY_HTF2/CHART`.
+- Baseline checks before rewrite:
+  - `make check-release` ✅
+  - `make lint` ✅
+  - `make check-dev` ✅
+  - `make tv-export` ✅
+
+### Rewrite summary (methodology sync)
+- Reworked HTF engine from pivot-centric behavior to **base/flat → breakout edge → POC zone** flow for HTF1/HTF2.
+- Added stateful HTF base pack (inside `request.security`, `lookahead_off`, `gaps_off`) with required controls:
+  - `base_len`, `touch_tolerance`, `min_touches`, `max_range_atr`, `exit_confirm_bars`.
+- Zone creation now occurs once per breakout edge and is centered around base POC with ATR pad (`htf_poc_pad_mult`).
+- Added explicit zone lifecycle statuses and transitions: `ACTIVE`, `TOUCHED`, `CONSUMED`, `INVALID`, `EXPIRED`.
+  - Touches increment only on first-entry edge.
+  - `CONSUMED` after first touch + reaction threshold (`consume_reaction_atr_mult`).
+  - `INVALID` confirmation with `invalidate_confirm_bars` + optional `body_confirm`.
+  - Optional role reversal via `flip_on_break`.
+- Enforced two active contexts for UX readability:
+  - nearest BUY zone and nearest SELL zone are tracked independently and shown simultaneously in HUD.
+- Made LTF stage mandatory-capable:
+  - Added `use_ltf_entry_gate`, `ltf_gate_mode(NEAR/IN_ZONE)`, `ltf_near_atr`.
+  - LTF bundle is computed in one `request.security(ltf, ...)` pack and used in stage pipeline.
+- Reworked confirm module to modular mode:
+  - Added `confirm_mode (ALL/ANY/SCORE)` + `confirm_min_passed`.
+  - Trap moved to event-style signal + optional confirm member (`use_trap_confirm` default false).
+  - RR gate hardened with safe risk guard (`risk > mintick` + `not na`).
+- UX refresh:
+  - stage icons (`⏳`, `⚡`, `✅`, `▲/▼`, `⛔`) and dual BUY/SELL HUD rows with module status flags.
+  - zone labels include side + POC + TF text (`BUY POC (4H)`, etc).
+- Contract intentionally changed (inputs/alerts renamed/expanded for the new pipeline); lock file refreshed via repo tool.
