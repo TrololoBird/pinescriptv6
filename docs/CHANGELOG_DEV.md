@@ -149,3 +149,29 @@
   - RR model switched to zone-boundary stop with TP multipliers (`rr_main_mult`, `rr_ext_mult`) + bounded RR history overlay (`rr_hist_keep`).
 - Public contract intentionally changed (new inputs/options), `contract.lock.json` refreshed via `python tools/contract_guard.py --init`.
 - Performance/object-budget safeguards preserved: `lookahead_off` requests only, bounded RR history pruning, capped POC bins/sampling step.
+
+## 2026-02-19 — v12.0.0 stage/zone consistency + near/in-zone edge reliability
+
+- Zone ATR is now persisted per-zone (`z_atr`) and consumed consistently for:
+  - invalidation padding during zone lifecycle checks,
+  - active-zone NEAR threshold (`near_thr`),
+  - RR stop padding (`buy_stop`/`sell_stop`).
+- NEAR and IN_ZONE edge events were decoupled from stage-transition-only logic:
+  - added geometric edge memory (`prev_near_now`, `prev_inside_now`) with reset on active-zone switch,
+  - `near_edge` now triggers on first geometric NEAR approach,
+  - `in_zone_edge` now triggers on first geometric zone entry even if stage escalates to CONFIRM/ENTRY on the same bar.
+- Event icons aligned with geometric edges:
+  - `⏳` emitted on `near_edge`,
+  - `⚡` emitted on `in_zone_edge`.
+- Updated near/in-zone alert descriptions to reflect geometric semantics while preserving existing alert IDs.
+- PP bias hardening:
+  - `bias_mode="PP"` now uses `pp_trend_dir` only when `pp_state >= 3`; otherwise bias is neutral (`0`).
+- POC profile allocation optimization in `f_poc_profile_last_n`:
+  - replaced per-call array allocation with reusable `var float[]` buffer,
+  - dynamic resize only on bin-count changes,
+  - explicit zeroing loop for reuse (`bins<=120`).
+- FLAT LTF detection upgraded to a minimal state machine via new `f_flat_state_ltf_stateful`:
+  - persistent `in_flat`, `flat_hi/flat_lo`, and `exit_cnt`,
+  - candidate-entry capture on valid/touches condition,
+  - confirmed exit requires `_exit_confirm` consecutive closes outside the flat range.
+- Contract lock refreshed (`python tools/contract_guard.py --init`) to record intentional alert text updates.

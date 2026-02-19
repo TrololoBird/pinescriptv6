@@ -91,7 +91,12 @@ f_poc_profile_last_n(int _len, int _bins, string _mode) =>
     if rng <= 0 or bin_size <= 0
         na
     else
-        array<float> vols = array.new_float(bins_actual, 0.0)
+        var float[] vols = array.new_float()
+        if array.size(vols) != bins_actual
+            vols := array.new_float(bins_actual, 0.0)
+        else
+            for bi = 0 to bins_actual - 1
+                array.set(vols, bi, 0.0)
         float cum_pv = 0.0
         float cum_v = 0.0
         for i = 0 to _len - 1 by step
@@ -114,7 +119,7 @@ f_poc_profile_last_n(int _len, int _bins, string _mode) =>
                 max_idx := bi
         lo + (max_idx + 0.5) * bin_size
 
-f_flat_state_ltf(int _len, float _touch_tol, int _min_touches, int _exit_confirm, float _max_range_atr) =>
+f_flat_state_ltf_stateful(int _len, float _touch_tol, int _min_touches, int _exit_confirm, float _max_range_atr) =>
     float atrv = ta.atr(14)
     float cand_high = ta.highest(high, _len)
     float cand_low = ta.lowest(low, _len)
@@ -125,19 +130,37 @@ f_flat_state_ltf(int _len, float _touch_tol, int _min_touches, int _exit_confirm
         cand_touch_top += high[i] >= cand_high * (1 - _touch_tol) ? 1 : 0
         cand_touch_bot += low[i] <= cand_low * (1 + _touch_tol) ? 1 : 0
     bool valid = rng <= atrv * _max_range_atr and cand_touch_top >= _min_touches and cand_touch_bot >= _min_touches
-    [valid ? cand_high : na, valid ? cand_low : na, valid]
+    var bool in_flat = false
+    var float flat_hi = na
+    var float flat_lo = na
+    var int exit_cnt = 0
+    if not in_flat and valid and cand_touch_top >= _min_touches and cand_touch_bot >= _min_touches
+        flat_hi := cand_high
+        flat_lo := cand_low
+        in_flat := true
+        exit_cnt := 0
+    if in_flat
+        bool out_of_range = close > flat_hi or close < flat_lo
+        exit_cnt := out_of_range ? exit_cnt + 1 : 0
+        if exit_cnt >= _exit_confirm
+            in_flat := false
+            flat_hi := na
+            flat_lo := na
+            exit_cnt := 0
+    [flat_hi, flat_lo, in_flat]
 
 f_ltf_bundle() =>
     float atr_ltf_local = ta.atr(14)
     float poc_ltf_local = f_poc_profile_last_n(poc_len, poc_bins, poc_price_mode)
     float accum_hi_local = ta.highest(high, accum_len)
     float accum_lo_local = ta.lowest(low, accum_len)
-    [fh, fl, fv] = f_flat_state_ltf(accum_len, touch_tolerance, min_touches, exit_confirm_bars, accum_max_atr)
+    [fh, fl, fv] = f_flat_state_ltf_stateful(accum_len, touch_tolerance, min_touches, exit_confirm_bars, accum_max_atr)
     [atr_ltf_local, poc_ltf_local, accum_hi_local, accum_lo_local, fh, fl, fv]
 
 var float[] z_top = array.new_float()
 var float[] z_bot = array.new_float()
 var int[] z_type = array.new_int() // 1 demand, -1 supply
+var float[] z_atr = array.new_float()
 var string[] z_tf = array.new_string()
 var int[] z_pivot_time = array.new_int()
 var int[] z_right_time = array.new_int()
@@ -179,6 +202,7 @@ f_remove_zone(int _idx) =>
     array.remove(z_top, _idx)
     array.remove(z_bot, _idx)
     array.remove(z_type, _idx)
+    array.remove(z_atr, _idx)
     array.remove(z_tf, _idx)
     array.remove(z_pivot_time, _idx)
     array.remove(z_right_time, _idx)
@@ -227,6 +251,7 @@ f_add_zone(float _top, float _bot, int _type, string _tf, int _pivot_time, float
     array.push(z_top, _top)
     array.push(z_bot, _bot)
     array.push(z_type, _type)
+    array.push(z_atr, _atr_h)
     array.push(z_tf, _tf)
     array.push(z_pivot_time, _pivot_time)
     array.push(z_right_time, right_time)
@@ -339,13 +364,11 @@ zone_invalidated_demand := false
 zone_invalidated_supply := false
 
 float atr = ta.atr(14)
-float near_thr = atr * near_thr_atr
-float invalidate_pad = atr * invalidate_atr_mult
 
 [htf1_close, htf1_ema] = request.security(syminfo.tickerid, htf1, [close, ta.ema(close, 50)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 [pp_trend_dir, pp_state, pp_block_all, pp_confirm_dir] = request.security(syminfo.tickerid, htf1, f_pp_state(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 int ema_bias = htf1_close > htf1_ema ? 1 : htf1_close < htf1_ema ? -1 : 0
-int bias = bias_mode == "PP" ? pp_trend_dir : ema_bias
+int bias = bias_mode == "PP" ? (pp_state >= 3 ? pp_trend_dir : 0) : ema_bias
 
 var int[] zone_drop_idx = array.new_int()
 array.clear(zone_drop_idx)
@@ -365,7 +388,8 @@ for i = 0 to array.size(z_top) - 1
             if st == Z_ACTIVE
                 array.set(z_status, i, Z_TOUCHED)
                 array.set(z_reason, i, "Price touched zone")
-        bool invalid = (typ == -1 and close > top + invalidate_pad) or (typ == 1 and close < bot - invalidate_pad)
+        float invalidate_pad_i = math.max(array.get(z_atr, i) * invalidate_atr_mult, syminfo.mintick)
+        bool invalid = (typ == -1 and close > top + invalidate_pad_i) or (typ == 1 and close < bot - invalidate_pad_i)
         bool expired = touches >= max_touches or age > max_age_bars
         if invalid
             array.set(z_status, i, Z_INVALID)
@@ -429,6 +453,8 @@ int active_type = has_active ? array.get(z_type, active_idx) : 0
 float active_top = has_active ? array.get(z_top, active_idx) : na
 float active_bot = has_active ? array.get(z_bot, active_idx) : na
 float active_dist = has_active ? (close > active_top ? close - active_top : close < active_bot ? active_bot - close : 0.0) : na
+float active_atr = has_active ? array.get(z_atr, active_idx) : ta.atr(14)
+float near_thr = active_atr * near_thr_atr
 bool inside_active = has_active and close <= active_top and close >= active_bot
 int active_zone_id = has_active ? array.get(z_id, active_idx) : -1
 string active_zone_status = has_active ? f_zone_status_text(array.get(z_status, active_idx)) : "NONE"
@@ -457,8 +483,8 @@ if not na(last_break_bar) and (bar_index - last_break_bar) > trap_max_bars
 bool trap_buy = not na(last_break_bar) and last_break_dir == "dn" and close > last_break_level and (bar_index - last_break_bar) <= trap_max_bars and (not trap_use_volume or volume <= vol_ma * trap_return_vol_mult)
 bool trap_sell = not na(last_break_bar) and last_break_dir == "up" and close < last_break_level and (bar_index - last_break_bar) <= trap_max_bars and (not trap_use_volume or volume <= vol_ma * trap_return_vol_mult)
 
-float buy_stop = has_active ? active_bot - math.max(atr * invalidate_atr_mult, syminfo.mintick) : na
-float sell_stop = has_active ? active_top + math.max(atr * invalidate_atr_mult, syminfo.mintick) : na
+float buy_stop = has_active ? active_bot - math.max(active_atr * invalidate_atr_mult, syminfo.mintick) : na
+float sell_stop = has_active ? active_top + math.max(active_atr * invalidate_atr_mult, syminfo.mintick) : na
 float buy_risk = has_active ? math.abs(close - buy_stop) : na
 float sell_risk = has_active ? math.abs(sell_stop - close) : na
 float buy_tp_main = buy_risk > 0 ? close + buy_risk * rr_main_mult : na
@@ -542,16 +568,27 @@ else
 
 var string prev_stage = ""
 var int prev_active_zone_id = -1
+var bool prev_near_now = false
+var bool prev_inside_now = false
 bool stage_transition = stage != prev_stage
 bool zone_changed = active_zone_id != prev_active_zone_id
 bool stage_changed = stage_transition or zone_changed
 
-if stage_transition and show_labels
-    if prev_stage == STAGE_FAR and stage == STAGE_NEAR
+if zone_changed
+    prev_near_now := false
+    prev_inside_now := false
+
+bool near_now = has_active and not inside_active and active_dist <= near_thr
+bool inside_now = inside_active
+bool near_edge = near_now and not prev_near_now
+bool in_zone_edge = inside_now and not prev_inside_now
+
+if show_labels
+    if near_edge
         f_event("⏳ " + (active_type == 1 ? "NEAR BUY" : "NEAR SELL"), close, color.new(color.blue, 0), label.style_label_left)
-    if prev_stage == STAGE_NEAR and stage == STAGE_IN_ZONE
+    if in_zone_edge
         f_event("⚡ IN ZONE", close, color.new(color.purple, 0), label.style_label_left)
-    if stage == STAGE_ENTRY
+    if stage_transition and stage == STAGE_ENTRY
         if entry_buy_sig
             f_event("▲ BUY RR=" + str.tostring(buy_rr, "#.##"), low, color.new(color.green, 0), label.style_label_up)
         if entry_sell_sig
@@ -656,8 +693,6 @@ bool stage_confirm = stage == STAGE_CONFIRM
 bool stage_entry = stage == STAGE_ENTRY
 bool stage_blocked = stage == STAGE_BLOCKED
 
-bool near_edge = stage_transition and prev_stage == STAGE_FAR and stage == STAGE_NEAR
-bool in_zone_edge = stage_transition and prev_stage == STAGE_NEAR and stage == STAGE_IN_ZONE
 bool entry_edge = stage_transition and stage == STAGE_ENTRY
 
 if show_rr_history and entry_edge
@@ -682,10 +717,10 @@ if show_rr_history and entry_edge
         if not na(dl)
             line.delete(dl)
 
-alertcondition(near_edge and active_type == 1, "price_near_buy_zone", "Stage change FAR->NEAR BUY")
-alertcondition(near_edge and active_type == -1, "price_near_sell_zone", "Stage change FAR->NEAR SELL")
-alertcondition(in_zone_edge and active_type == 1, "price_in_buy_zone", "Stage change NEAR->IN_ZONE BUY")
-alertcondition(in_zone_edge and active_type == -1, "price_in_sell_zone", "Stage change NEAR->IN_ZONE SELL")
+alertcondition(near_edge and active_type == 1, "price_near_buy_zone", "Price NEAR BUY zone")
+alertcondition(near_edge and active_type == -1, "price_near_sell_zone", "Price NEAR SELL zone")
+alertcondition(in_zone_edge and active_type == 1, "price_in_buy_zone", "Price entered BUY zone")
+alertcondition(in_zone_edge and active_type == -1, "price_in_sell_zone", "Price entered SELL zone")
 alertcondition(entry_edge and entry_buy_sig, "entry_buy", "ENTRY BUY on stage transition")
 alertcondition(entry_edge and entry_sell_sig, "entry_sell", "ENTRY SELL on stage transition")
 alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_buy_sig, "blocked_buy", "BUY blocked on stage transition")
@@ -695,6 +730,9 @@ alertcondition(zone_created_demand, "zone_created_demand", "DEMAND zone created"
 alertcondition(zone_created_supply, "zone_created_supply", "SUPPLY zone created")
 alertcondition(zone_invalidated_demand, "zone_invalidated_demand", "DEMAND zone invalidated")
 alertcondition(zone_invalidated_supply, "zone_invalidated_supply", "SUPPLY zone invalidated")
+
+prev_near_now := near_now
+prev_inside_now := inside_now
 
 prev_stage := stage
 prev_active_zone_id := active_zone_id
