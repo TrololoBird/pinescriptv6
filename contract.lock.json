@@ -40,8 +40,8 @@
     ]
   },
   "alerts": {
-    "count": 8,
-    "sha256": "f7d6ab184b3ce6063d7f48bd821137d285cebc8848fa969902a8f484133e6dc7",
+    "count": 12,
+    "sha256": "f5565bd12aed173443058b845027501c0dd7fb4d9db787d99b3aa371180f837a",
     "lines": [
       "alertcondition(near_edge and active_type == 1, \"price_near_buy_zone\", \"Stage change FAR->NEAR BUY\")",
       "alertcondition(near_edge and active_type == -1, \"price_near_sell_zone\", \"Stage change FAR->NEAR SELL\")",
@@ -50,7 +50,11 @@
       "alertcondition(entry_edge and entry_buy_sig, \"entry_buy\", \"ENTRY BUY on stage transition\")",
       "alertcondition(entry_edge and entry_sell_sig, \"entry_sell\", \"ENTRY SELL on stage transition\")",
       "alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_buy_sig, \"blocked_buy\", \"BUY blocked on stage transition\")",
-      "alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_sell_sig, \"blocked_sell\", \"SELL blocked on stage transition\")"
+      "alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_sell_sig, \"blocked_sell\", \"SELL blocked on stage transition\")",
+      "alertcondition(zone_created_demand, \"zone_created_demand\", \"DEMAND zone created\")",
+      "alertcondition(zone_created_supply, \"zone_created_supply\", \"SUPPLY zone created\")",
+      "alertcondition(zone_invalidated_demand, \"zone_invalidated_demand\", \"DEMAND zone invalidated\")",
+      "alertcondition(zone_invalidated_supply, \"zone_invalidated_supply\", \"SUPPLY zone invalidated\")"
     ]
   }
 }
