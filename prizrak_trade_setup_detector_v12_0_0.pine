@@ -85,7 +85,7 @@ f_poc_profile_last_n(int _len, int _bins, string _mode) =>
     float hi = ta.highest(high, _len)
     float lo = ta.lowest(low, _len)
     float rng = hi - lo
-    int bins_actual = math.max(2, math.min(_bins, 120))
+    int bins_actual = math.max(24, math.min(_bins, 120))
     float min_bin = math.max(rng * 0.0005, syminfo.mintick)
     float bin_size = math.max(rng / bins_actual, min_bin)
     int step_cap = 800
@@ -550,17 +550,17 @@ bool trig_ok = trig_buy or trig_sell
 if has_active
     if inside_active
         stage := STAGE_IN_ZONE
-        next_action := "Wait confirm"
+        next_action := "Watch confirm"
         if rr_ok and pp_ok and trap_ok and osc_ok
             stage := STAGE_CONFIRM
             ready_reason_code := trap_ok ? "TRAP OK" : "TRAP WAIT"
             ready_reason_text := trap_ok ? "TRAP OK; waiting breakout trigger" : "TRAP WAIT"
-            next_action := "Wait trigger"
+            next_action := "Wait entry trigger"
             if trig_ok
                 stage := STAGE_ENTRY
                 block_reason_code := "NONE"
                 block_reason_text := ""
-                next_action := trig_buy ? "▲ BUY" : "▼ SELL"
+                next_action := trig_buy ? "▲ BUY RR=" + str.tostring(buy_rr, "#.##") : "▼ SELL RR=" + str.tostring(sell_rr, "#.##")
                 entry_buy_sig := trig_buy
                 entry_sell_sig := trig_sell
         else
@@ -588,10 +588,10 @@ if has_active
         next_action := active_type == 1 ? "Prepare BUY" : "Prepare SELL"
     else
         stage := STAGE_FAR
-        next_action := "Wait approach"
+        next_action := "Wait"
 else
     stage := STAGE_FAR
-    next_action := "NO HTF CONTEXT"
+    next_action := "Wait"
 
 var string prev_stage = ""
 var int prev_active_zone_id = -1
@@ -672,7 +672,7 @@ else
 var label active_label = na
 if has_active and show_labels
     string active_text = "ACTIVE " + (active_type == 1 ? "DEMAND " : "SUPPLY ") + array.get(z_tf, active_idx) + " | stage=" + stage + " | next=" + next_action
-    float active_y = active_type == 1 ? active_bot : active_top
+    float active_y = close
     if na(active_label)
         active_label := f_label(time, active_y, active_text, color.new(color.black, 70), color.white, label.style_label_left)
     else
