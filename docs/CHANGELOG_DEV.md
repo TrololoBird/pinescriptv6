@@ -137,3 +137,15 @@
   - `zone_created_demand/supply`
   - `zone_invalidated_demand/supply`
 - Refreshed `contract.lock.json` to capture intentional alert/interface updates.
+
+## 2026-02-19 (v12 migration: v11 core ports)
+
+- v12 promoted as canonical runtime path; v11 kept as legacy/reference only (no deletion).
+- Ported v11 core modules into `prizrak_trade_setup_detector_v12_0_0.pine` while keeping v12 UX flow (zones → stages → entry, HUD/icons/lifecycle alerts):
+  - Real LTF POC profile (`binning + volume aggregation`) with `poc_bins`, `poc_price_mode`, and capped sampling step.
+  - LTF FLAT mode with touch-based range validation and stable flat zone rendering.
+  - Anchored trap state (`last_break_*`, window reset, optional volume gates) for sweep+return confirmation.
+  - PP strict pending→confirm→active state machine on HTF1; PP can drive bias (`bias_mode=PP`).
+  - RR model switched to zone-boundary stop with TP multipliers (`rr_main_mult`, `rr_ext_mult`) + bounded RR history overlay (`rr_hist_keep`).
+- Public contract intentionally changed (new inputs/options), `contract.lock.json` refreshed via `python tools/contract_guard.py --init`.
+- Performance/object-budget safeguards preserved: `lookahead_off` requests only, bounded RR history pruning, capped POC bins/sampling step.
