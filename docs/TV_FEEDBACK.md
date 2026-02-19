@@ -186,3 +186,40 @@
   - Screenshot with `debug_mode=true` + `show_debug_table=true`.
   - Screenshot with `debug_mode=false`.
 - Include notes whether trap happened vs expected break-level anchor behavior.
+
+## 2026-02-19 00:20:00Z — Codex BTCUSDT 5m/15m/30m verification checklist (append-only)
+- Local strict gates for this patch are expected to pass both before and after edits:
+  - `make check-release`
+  - `make contract-check`
+  - `make lint`
+  - `make check-dev`
+  - `make tv-export`
+- Contract guardrails:
+  - Keep public contract unchanged (`indicator/input/alertcondition`).
+  - Confirm `git diff -- contract.lock.json` is empty.
+
+### TradingView replay checklist
+- Symbols/TF:
+  - BTCUSDT 5m
+  - BTCUSDT 15m
+  - BTCUSDT 30m
+- For each TF, validate in both modes:
+  - `debug_mode=true` (+ optional debug table on)
+  - `debug_mode=false`
+
+### Focus checks for this patch
+- Debug overlay scale:
+  - Candles do not collapse/squash when `debug_mode=true`.
+  - Only price-unit debug plots stay on overlay scale (`DBG Flat Mid`, `DBG POC Level`, `DBG Stop Price`).
+- Future-time extension:
+  - `rr_open_extend` visibly extends OPEN-RR objects to the right of current bar.
+  - Right-side RR labels/boxes are placed in future time, not pinned to current bar.
+- POC tests edge-trigger:
+  - `poc_tests` increments only on touch-entry transitions (not every touched bar).
+  - Active POC levels decay slower; `POC:block no_active_poc` appears less frequently on 30m.
+- Working-level cross hardening:
+  - Cross/break/setup signals are not produced from nearest-POC jumping between bars.
+- Trap lifecycle:
+  - `last_break_*` state clears after `trap_max_bars` expiry (no sticky stale break diagnostics).
+- Anti-spam setup gate:
+  - RR history no longer forms dense barcode-like vertical stripes around one level on 5m/15m.

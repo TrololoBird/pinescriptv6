@@ -165,20 +165,23 @@ f_fmt(float p) => str.tostring(p, format.mintick)
 f_clamp_int(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
 f_clamp_bar_x(int x) => f_clamp_int(x, bar_index - 500, bar_index + 500)
 f_bar_time_from_index(int x) =>
-    if na(x)
+    int xSafe = na(x) ? bar_index : f_clamp_bar_x(x)
+    if na(xSafe)
         time
     else
-        if x <= bar_index
-            int off = bar_index - x
+        if xSafe <= bar_index
+            int off = bar_index - xSafe
             int offClamped = math.max(off, 0)
             int maxHistory = math.min(bar_index, 5000)
             int offSafe = math.min(offClamped, maxHistory)
             time[offSafe]
         else
-            int dt = bar_index > 0 ? (time - time[1]) : 0
+            int dt = bar_index > 0 and not na(time[1]) ? int(time - time[1]) : 0
             if dt <= 0
-                dt := timeframe.in_seconds() > 0 ? timeframe.in_seconds() * 1000 : 60000
-            time + dt * (x - bar_index)
+                int tfSec = timeframe.in_seconds(timeframe.period)
+                dt := tfSec > 0 ? tfSec * 1000 : 60000
+            int steps = f_clamp_int(xSafe - bar_index, 0, 500)
+            int(time + dt * steps)
 
 f_box(box _bx, int _x1, float _y1, int _x2, float _y2, color _bg, color _bd, int _bw) =>
     box out = _bx
@@ -480,9 +483,8 @@ var int dbg_pp_state_log = na
 var int dbg_setup_state = na
 var int dbg_visual_state = na
 
-const int SETUP_COOLDOWN_BARS = 3
+const int SETUP_COOLDOWN_BARS = 5
 var float last_setup_level = na
-var int last_setup_dir = 0
 var int last_setup_bar = na
 var bool setup_armed = true
 
@@ -921,6 +923,12 @@ if enable_traps and not na(working_level)
         last_break_bar := bar_index
         last_break_dir := "down"
         last_break_level := working_level
+
+if not na(last_break_bar) and (bar_index - last_break_bar) > trap_max_bars
+    last_break_bar := na
+    last_break_dir := ""
+    last_break_level := na
+
 bool trap_up = false
 bool trap_down = false
 int trap_flag = 0
@@ -982,10 +990,12 @@ float atr_ref = atr
 float zone_half = not na(working_level) ? math.max(math.abs(working_level) * poc_test_tolerance, atr * 0.10) : na
 near_level = not na(working_level) ? math.abs(close - working_level) <= atr_ref * test_atr_frac : false
 bool level_changed = not na(last_setup_level) and not na(working_level) and math.abs(working_level - last_setup_level) > syminfo.mintick
-if not setup_armed
-    float escape = not na(zone_half) ? math.max(atr * test_atr_frac, zone_half) : atr * test_atr_frac
-    bool escaped_from_level = na(last_setup_level) or math.abs(close - last_setup_level) > escape
-    setup_armed := escaped_from_level or na(working_level) or level_changed
+float escape = not na(zone_half) ? math.max(atr * test_atr_frac, zone_half) : atr * test_atr_frac
+bool escaped_from_level = na(last_setup_level) or math.abs(close - last_setup_level) >= escape
+if na(last_setup_level)
+    setup_armed := true
+else if escaped_from_level or level_changed
+    setup_armed := true
 bool cooldown_passed = na(last_setup_bar) or (bar_index - last_setup_bar) >= SETUP_COOLDOWN_BARS
 bool setup_gate_ok = setup_armed and cooldown_passed
 bool htf_buy_priority = htf_trend_dir == 1
@@ -1024,15 +1034,14 @@ if buy_setup_base or sell_setup_base
     rr_ok_buy := risk_buy > 0 and not na(rr_quality_buy) and rr_quality_buy >= rr_min
     rr_ok_sell := risk_sell > 0 and not na(rr_quality_sell) and rr_quality_sell >= rr_min
 
-buy_setup = buy_setup_base and (not rr_gate_enabled or rr_ok_buy)
-sell_setup = sell_setup_base and (not rr_gate_enabled or rr_ok_sell)
+buy_setup = buy_setup_base and (not rr_gate_enabled or rr_ok_buy) and setup_gate_ok
+sell_setup = sell_setup_base and (not rr_gate_enabled or rr_ok_sell) and setup_gate_ok
 
-open_buy = buy_setup and setup_gate_ok
-open_sell = sell_setup and setup_gate_ok
+open_buy = buy_setup
+open_sell = sell_setup
 
 if open_buy or open_sell
     last_setup_level := working_level
-    last_setup_dir := open_buy ? 1 : -1
     last_setup_bar := bar_index
     setup_armed := false
 int setup_diag_state = na(working_level) ? -6 : ((pp_block_buy and work_cross_up) or (pp_block_sell and work_cross_dn)) ? -5 : (not work_cross_up and not work_cross_dn) ? -4 : ((work_cross_up and not buy_dir_ok) or (work_cross_dn and not sell_dir_ok)) ? -3 : ((work_cross_up and not bull_ok) or (work_cross_dn and not bear_ok)) ? -2 : not near_level ? -1 : ((buy_setup_base and rr_gate_enabled and not rr_ok_buy) or (sell_setup_base and rr_gate_enabled and not rr_ok_sell)) ? 0 : (buy_setup or sell_setup) ? 2 : 1
@@ -1433,22 +1442,22 @@ else
         dbg_lbl := na
 
 plot(debug_mode ? debug_flat_mid : na, "DBG Flat Mid", color=skin_working_line_col, linewidth=1, style=plot.style_line)
-plot(debug_mode ? (flat_valid_now ? 1 : 0) : na, "DBG Flat Detected", color=skin_poc_line, linewidth=1, style=plot.style_columns, display=display.data_window)
+plot(debug_mode ? (flat_valid_now ? 1 : 0) : na, "DBG Flat Detected", color=skin_poc_line, linewidth=1, style=plot.style_columns, display=display.data_window, scale=scale.none)
 plot(debug_mode ? debug_poc_level : na, "DBG POC Level", color=skin_poc_line, linewidth=2, style=plot.style_line)
 plot(debug_mode ? stop_price : na, "DBG Stop Price", color=skin_stop_line_col, linewidth=2, style=plot.style_line)
-plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_stepline, display=display.data_window)
-plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_stepline, display=display.data_window)
-plot(debug_mode ? debug_stf_trend_dir : na, "DBG STF Trend Dir", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.data_window)
-plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flag", color=skin_trap_col, linewidth=2, style=plot.style_histogram, display=display.data_window)
-plot(debug_mode ? debug_rr_quality : na, "DBG RR Quality", color=skin_take_fill, linewidth=1, style=plot.style_line, display=display.data_window)
-plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns, display=display.data_window)
-plot(debug_mode ? flat_diag_state : na, "DBG Flat State Code", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
-plot(debug_mode ? debug_working_tests : na, "DBG POC Working Tests", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none)
-plot(debug_mode ? (stop_volume_event ? 1 : 0) : na, "DBG SV Event", color=skin_stop_line_col, linewidth=1, style=plot.style_columns, display=display.none)
-plot(debug_mode ? (debug_break_detected ? 1 : 0) : na, "DBG Trap Break", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none)
-plot(debug_mode ? (debug_trap_window ? 1 : 0) : na, "DBG Trap Window", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none)
-plot(debug_mode ? (debug_trap_vol_pass ? 1 : 0) : na, "DBG Trap Vol Gate", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none)
-plot(debug_mode ? debug_pp_pending_dir : na, "DBG PP Pending Dir", color=skin_choch_col, linewidth=1, style=plot.style_stepline, display=display.none)
+plot(debug_mode ? debug_pp_state : na, "DBG PP State", color=skin_choch_col, linewidth=1, style=plot.style_stepline, display=display.data_window, scale=scale.none)
+plot(debug_mode ? debug_htf_trend_dir : na, "DBG HTF Trend Dir", color=skin_working_line_col, linewidth=1, style=plot.style_stepline, display=display.data_window, scale=scale.none)
+plot(debug_mode ? debug_stf_trend_dir : na, "DBG STF Trend Dir", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.data_window, scale=scale.none)
+plot(debug_mode ? debug_trap_flags : na, "DBG Trap Flag", color=skin_trap_col, linewidth=2, style=plot.style_histogram, display=display.data_window, scale=scale.none)
+plot(debug_mode ? debug_rr_quality : na, "DBG RR Quality", color=skin_take_fill, linewidth=1, style=plot.style_line, display=display.data_window, scale=scale.none)
+plot(debug_mode ? debug_rr_gate_state : na, "DBG RR Gate", color=skin_take_fill, linewidth=1, style=plot.style_columns, display=display.data_window, scale=scale.none)
+plot(debug_mode ? flat_diag_state : na, "DBG Flat State Code", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none, scale=scale.none)
+plot(debug_mode ? debug_working_tests : na, "DBG POC Working Tests", color=skin_poc_line, linewidth=1, style=plot.style_stepline, display=display.none, scale=scale.none)
+plot(debug_mode ? (stop_volume_event ? 1 : 0) : na, "DBG SV Event", color=skin_stop_line_col, linewidth=1, style=plot.style_columns, display=display.none, scale=scale.none)
+plot(debug_mode ? (debug_break_detected ? 1 : 0) : na, "DBG Trap Break", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none, scale=scale.none)
+plot(debug_mode ? (debug_trap_window ? 1 : 0) : na, "DBG Trap Window", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none, scale=scale.none)
+plot(debug_mode ? (debug_trap_vol_pass ? 1 : 0) : na, "DBG Trap Vol Gate", color=skin_trap_col, linewidth=1, style=plot.style_columns, display=display.none, scale=scale.none)
+plot(debug_mode ? debug_pp_pending_dir : na, "DBG PP Pending Dir", color=skin_choch_col, linewidth=1, style=plot.style_stepline, display=display.none, scale=scale.none)
 
 // =========================
 // ALERTS
