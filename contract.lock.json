@@ -8,13 +8,14 @@
     ]
   },
   "inputs": {
-    "count": 45,
-    "sha256": "5236110e12b9b9e2c69b250f68469a3530e70ed5b1b7448d13bc15a9a2bcb1db",
+    "count": 49,
+    "sha256": "49a8f6677f7c905538ef80a778a6eff983c9b2841420a26339a726897627cabd",
     "lines": [
       "mode_tf = input.string(\"AUTO\", \"TF mode\", options=[\"AUTO\", \"MANUAL\"], group=\"TF Hierarchy\")",
       "manual_htf1 = input.timeframe(\"240\", \"Manual HTF1\", group=\"TF Hierarchy\")",
       "manual_htf2 = input.timeframe(\"60\", \"Manual HTF2\", group=\"TF Hierarchy\")",
       "manual_ltf = input.timeframe(\"\", \"Manual LTF (blank = chart)\", group=\"TF Hierarchy\")",
+      "auto_ltf_mode = input.string(\"AUTO_BY_CHART\", \"AUTO LTF mode\", options=[\"AUTO_BY_CHART\", \"AUTO_BY_HTF2\", \"CHART\"], group=\"TF Hierarchy\")",
       "pivot_left = input.int(3, \"Pivot left bars\", minval=1, maxval=20, group=\"Zone Engine • HTF\")",
       "pivot_right = input.int(3, \"Pivot right bars\", minval=1, maxval=20, group=\"Zone Engine • HTF\")",
       "htf_zone_atr_mult = input.float(0.35, \"HTF zone ATR multiplier\", minval=0.05, step=0.05, group=\"Zone Engine • HTF\")",
@@ -52,6 +53,9 @@
       "pp_confirm_bars = input.int(2, \"PP confirm bars\", minval=1, maxval=10, group=\"Stages\")",
       "pp_confirm_vol_mult = input.float(1.0, \"PP volume >= MA *\", minval=0.2, step=0.1, group=\"Stages\")",
       "entry_break_len = input.int(2, \"Entry trigger lookback\", minval=1, maxval=10, group=\"Stages\")",
+      "use_ltf_entry_gate = input.bool(true, \"Require LTF entry zone for ENTRY\", group=\"Stages\")",
+      "ltf_gate_mode = input.string(\"INSIDE\", \"LTF gate mode\", options=[\"INSIDE\", \"NEAR\"], group=\"Stages\")",
+      "ltf_near_atr = input.float(0.3, \"LTF near ATR mult\", minval=0.0, step=0.05, group=\"Stages\")",
       "show_hud = input.bool(true, \"Show HUD\", group=\"Visual\")",
       "show_labels = input.bool(true, \"Show labels/icons\", group=\"Visual\")",
       "show_rr_history = input.bool(true, \"Show RR history\", group=\"Visual\")",
@@ -59,13 +63,15 @@
     ]
   },
   "alerts": {
-    "count": 13,
-    "sha256": "1fac7df182466bb159758795b5fb13dd857cdd8ac93b0869a7385d8f4804daab",
+    "count": 15,
+    "sha256": "fea24c8ced502d324b8b77f232c8fad95aaf0cb09a0fa0f50d407917b0d82064",
     "lines": [
       "alertcondition(near_edge and active_type == 1, \"price_near_buy_zone\", \"Price NEAR BUY zone\")",
       "alertcondition(near_edge and active_type == -1, \"price_near_sell_zone\", \"Price NEAR SELL zone\")",
       "alertcondition(in_zone_edge and active_type == 1, \"price_in_buy_zone\", \"Price entered BUY zone\")",
       "alertcondition(in_zone_edge and active_type == -1, \"price_in_sell_zone\", \"Price entered SELL zone\")",
+      "alertcondition(ltf_edge and active_type == 1, \"price_in_ltf_buy_zone\", \"Price entered LTF BUY entry zone\")",
+      "alertcondition(ltf_edge and active_type == -1, \"price_in_ltf_sell_zone\", \"Price entered LTF SELL entry zone\")",
       "alertcondition(entry_edge and entry_buy_sig, \"entry_buy\", \"ENTRY BUY on stage transition\")",
       "alertcondition(entry_edge and entry_sell_sig, \"entry_sell\", \"ENTRY SELL on stage transition\")",
       "alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_buy_sig, \"blocked_buy\", \"BUY blocked on stage transition\")",
