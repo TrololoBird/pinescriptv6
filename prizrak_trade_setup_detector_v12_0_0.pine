@@ -1,336 +1,329 @@
 //@version=6
-indicator("Prizrak Trade Setup Detector v12.0.0", shorttitle="Prizrak12", overlay=true, max_boxes_count=300, max_labels_count=300)
+indicator("Prizrak Trade Setup Detector v12.0.0", overlay=true, max_boxes_count=300, max_labels_count=300)
 
-// =========================
-// INPUTS
-// =========================
-group_tf = "MTF"
-tf_mode = input.string("AUTO", "TF mode", options=["AUTO", "MANUAL"], group=group_tf)
-manual_htf1 = input.timeframe("240", "Manual HTF1", group=group_tf)
-manual_htf2 = input.timeframe("60", "Manual HTF2", group=group_tf)
-manual_ltf = input.timeframe("", "Manual LTF (empty = chart)", group=group_tf)
+mode_tf = input.string("AUTO", "TF mode", options=["AUTO", "MANUAL"], group="TF Hierarchy")
+manual_htf1 = input.timeframe("240", "Manual HTF1", group="TF Hierarchy")
+manual_htf2 = input.timeframe("60", "Manual HTF2", group="TF Hierarchy")
+manual_ltf = input.timeframe("", "Manual LTF (blank = chart)", group="TF Hierarchy")
 
-group_htf = "HTF Zones"
-pivot_len = input.int(4, "Pivot length", minval=2, maxval=20, group=group_htf)
-htf_zone_atr_mult = input.float(0.35, "Zone pad ATR mult", minval=0.05, step=0.05, group=group_htf)
-invalidate_atr_mult = input.float(0.15, "Invalidation ATR mult", minval=0.0, step=0.05, group=group_htf)
-max_zones_per_tf = input.int(4, "Max zones per TF+type", minval=1, maxval=12, group=group_htf)
-zone_extend_bars = input.int(120, "Zone extend bars", minval=10, maxval=1000, group=group_htf)
-max_touches = input.int(6, "Max touches", minval=1, maxval=20, group=group_htf)
-max_age_bars = input.int(1200, "Max age bars", minval=100, maxval=10000, group=group_htf)
+pivot_left = input.int(3, "Pivot left bars", minval=1, maxval=20, group="Zone Engine • HTF")
+pivot_right = input.int(3, "Pivot right bars", minval=1, maxval=20, group="Zone Engine • HTF")
+htf_zone_atr_mult = input.float(0.35, "HTF zone ATR multiplier", minval=0.05, step=0.05, group="Zone Engine • HTF")
+invalidate_atr_mult = input.float(0.2, "Invalidation ATR pad", minval=0.0, step=0.05, group="Zone Engine • HTF")
+max_zones_per_tf = input.int(6, "Max zones per TF per side", minval=1, maxval=20, group="Zone Engine • HTF")
+max_touches = input.int(5, "Max touches before invalidate", minval=1, maxval=20, group="Zone Engine • HTF")
+max_age_bars = input.int(700, "Max age bars", minval=50, maxval=5000, group="Zone Engine • HTF")
+zone_extend_bars = input.int(400, "Zone extend bars", minval=20, maxval=5000, group="Zone Engine • HTF")
 
-group_ltf = "LTF Entry Zone"
-ltf_zone_mode = input.string("POC", "Entry zone mode", options=["POC", "ACCUM"], group=group_ltf)
-ltf_len = input.int(24, "LTF lookback", minval=8, maxval=200, group=group_ltf)
-ltf_pad_atr = input.float(0.2, "LTF zone pad ATR mult", minval=0.05, step=0.05, group=group_ltf)
-ltf_near_gate_atr = input.float(0.6, "Build only near HTF zone (ATR)", minval=0.1, step=0.1, group=group_ltf)
+ltf_zone_mode = input.string("POC", "LTF entry zone mode", options=["POC", "ACCUM"], group="Zone Engine • LTF")
+poc_len = input.int(48, "POC length", minval=10, maxval=500, group="Zone Engine • LTF")
+poc_atr_mult = input.float(0.35, "POC ATR multiplier", minval=0.05, step=0.05, group="Zone Engine • LTF")
+accum_len = input.int(24, "Accum range length", minval=5, maxval=200, group="Zone Engine • LTF")
+accum_max_atr = input.float(1.2, "Accum max range in ATR", minval=0.3, step=0.1, group="Zone Engine • LTF")
 
-group_stage = "Stages"
-near_thr_atr = input.float(0.8, "NEAR distance ATR mult", minval=0.1, step=0.1, group=group_stage)
-enable_choch = input.bool(true, "CONFIRM: CHOCH/PP", group=group_stage)
-enable_trap = input.bool(true, "CONFIRM: Trap-return", group=group_stage)
-enable_filters = input.bool(true, "CONFIRM: RSI/MACD filters", group=group_stage)
-enable_rr_gate = input.bool(true, "CONFIRM: RR gate", group=group_stage)
-rr_min = input.float(1.5, "RR min", minval=0.5, step=0.1, group=group_stage)
-entry_ema_len = input.int(9, "ENTRY trigger EMA", minval=2, maxval=50, group=group_stage)
+near_thr_atr = input.float(0.9, "Near threshold ATR multiple", minval=0.1, step=0.1, group="Stages")
+use_pp_confirm = input.bool(true, "Use CHOCH/PP confirm", group="Stages")
+use_trap_confirm = input.bool(true, "Use trap-return confirm", group="Stages")
+use_rsi_macd = input.bool(true, "Use RSI + MACD filter", group="Stages")
+use_rr_gate = input.bool(true, "Use RR gate", group="Stages")
+rr_min = input.float(1.8, "Min RR", minval=0.5, step=0.1, group="Stages")
+entry_break_len = input.int(2, "Entry trigger lookback", minval=1, maxval=10, group="Stages")
 
-group_filters = "Filter params"
-rsi_len = input.int(14, "RSI length", minval=5, maxval=50, group=group_filters)
-macd_fast = input.int(12, "MACD fast", minval=3, maxval=50, group=group_filters)
-macd_slow = input.int(26, "MACD slow", minval=5, maxval=80, group=group_filters)
-macd_sig = input.int(9, "MACD signal", minval=2, maxval=30, group=group_filters)
+show_hud = input.bool(true, "Show HUD", group="Visual")
+show_labels = input.bool(true, "Show labels/icons", group="Visual")
 
-group_vis = "Visual"
-show_hud = input.bool(true, "Show HUD", group=group_vis)
-show_ltf_zone = input.bool(true, "Show LTF entry zone", group=group_vis)
+int tf_sec = timeframe.in_seconds()
+string auto_htf1 = tf_sec <= 15 * 60 ? "240" : tf_sec <= 60 * 60 ? "D" : "W"
+string auto_htf2 = tf_sec <= 15 * 60 ? "60" : tf_sec <= 60 * 60 ? "240" : "D"
+string auto_ltf = timeframe.period
+string htf1 = mode_tf == "AUTO" ? auto_htf1 : manual_htf1
+string htf2 = mode_tf == "AUTO" ? auto_htf2 : manual_htf2
+string ltf = mode_tf == "AUTO" ? auto_ltf : (str.length(manual_ltf) == 0 ? timeframe.period : manual_ltf)
 
-// =========================
-// HELPERS
-// =========================
-f_sec(_tf, _expr) => request.security(syminfo.tickerid, _tf, _expr, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
-f_dist_to_zone(_price, _top, _bot) => _price > _top ? _price - _top : _price < _bot ? _bot - _price : 0.0
-f_in_zone(_price, _top, _bot) => _price <= _top and _price >= _bot
+f_box(float _l, float _t, float _r, float _b, color _bg, color _bd, int _bw) => box.new(_l, _t, _r, _b, xloc=xloc.bar_index, bgcolor=_bg, border_color=_bd, border_width=_bw)
+f_label(float _x, float _y, string _txt, color _bg, color _tc, int _style) => label.new(_x, _y, _txt, xloc=xloc.bar_index, style=_style, textcolor=_tc, color=_bg)
+f_del_box(box _b) => if not na(_b)
+    box.delete(_b)
+f_del_label(label _l) => if not na(_l)
+    label.delete(_l)
 
-chart_sec = timeframe.in_seconds(timeframe.period)
-chart_sec := chart_sec <= 0 ? 60 : chart_sec
-chart_ms = chart_sec * 1000
+var float[] z_top = array.new_float()
+var float[] z_bot = array.new_float()
+var int[] z_type = array.new_int() // 1 demand, -1 supply
+var string[] z_tf = array.new_string()
+var int[] z_created = array.new_int()
+var int[] z_touch = array.new_int()
+var bool[] z_active = array.new_bool()
+var box[] z_box = array.new_box()
+var label[] z_label = array.new_label()
+var bool[] z_near_once = array.new_bool()
+var bool[] z_in_once = array.new_bool()
+var label[] event_labels = array.new_label()
 
-is_m15_or_less = chart_sec <= 900
-is_30_or_1h = chart_sec == 1800 or chart_sec == 3600
-is_4h_or_more = chart_sec >= 14400
+f_prune_events() =>
+    while array.size(event_labels) > 40
+        label old = array.shift(event_labels)
+        f_del_label(old)
 
-auto_htf1 = is_m15_or_less ? "240" : is_30_or_1h ? "1D" : "1W"
-auto_htf2 = is_m15_or_less ? "60" : is_30_or_1h ? "240" : "1D"
-auto_ltf = timeframe.period
+f_event(string _text, float _price, color _bg, int _style) =>
+    if show_labels
+        label lb = f_label(bar_index, _price, _text, _bg, color.white, _style)
+        array.push(event_labels, lb)
+        f_prune_events()
 
-htf1_tf = tf_mode == "AUTO" ? auto_htf1 : manual_htf1
-htf2_tf = tf_mode == "AUTO" ? auto_htf2 : manual_htf2
-ltf_tf = tf_mode == "AUTO" ? auto_ltf : (str.length(manual_ltf) == 0 ? timeframe.period : manual_ltf)
+f_count_tf_type(string _tf, int _type) =>
+    int c = 0
+    for i = 0 to array.size(z_top) - 1
+        if array.get(z_tf, i) == _tf and array.get(z_type, i) == _type
+            c += 1
+    c
 
-// =========================
-// ZONE STORAGE
-// =========================
-var zone_top = array.new_float()
-var zone_bot = array.new_float()
-var zone_type = array.new_int()      // 1 demand, -1 supply
-var zone_tf = array.new_string()
-var zone_rank = array.new_int()      // 1=HTF1,2=HTF2,3=LTF
-var zone_created = array.new_int()
-var zone_touches = array.new_int()
-var zone_active = array.new_bool()
-var zone_box = array.new_box()
-var zone_label = array.new_label()
-
-f_zone_color(_type, _rank) =>
-    base = _type == 1 ? color.green : color.red
-    alpha = _rank == 1 ? 88 : _rank == 2 ? 80 : 70
-    color.new(base, alpha)
-
-f_prune_for_slot(_tf, _type) =>
-    int oldest_idx = na
-    int oldest_bar = 1000000000
-    int cnt = 0
-    for i = 0 to array.size(zone_top) - 1
-        if array.get(zone_active, i) and array.get(zone_tf, i) == _tf and array.get(zone_type, i) == _type
-            cnt += 1
-            cbar = array.get(zone_created, i)
-            if cbar < oldest_bar
-                oldest_bar := cbar
-                oldest_idx := i
-    if cnt >= max_zones_per_tf and not na(oldest_idx)
-        bx = array.get(zone_box, oldest_idx)
-        lb = array.get(zone_label, oldest_idx)
-        if not na(bx)
-            box.delete(bx)
-        if not na(lb)
-            label.delete(lb)
-        array.set(zone_active, oldest_idx, false)
-
-f_add_zone(_top, _bot, _type, _tf, _rank) =>
-    f_prune_for_slot(_tf, _type)
-    t = math.max(_top, _bot)
-    b = math.min(_top, _bot)
-    c = f_zone_color(_type, _rank)
-    bx = box.new(time, t, time + chart_ms * zone_extend_bars, b, xloc=xloc.bar_time, bgcolor=c, border_color=color.new(c, 0), border_width=1)
-    txt = (_type == 1 ? "DEMAND " : "SUPPLY ") + _tf
-    lb = label.new(time, t, txt, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.black, 70), textcolor=color.white, size=size.tiny)
-    array.push(zone_top, t)
-    array.push(zone_bot, b)
-    array.push(zone_type, _type)
-    array.push(zone_tf, _tf)
-    array.push(zone_rank, _rank)
-    array.push(zone_created, bar_index)
-    array.push(zone_touches, 0)
-    array.push(zone_active, true)
-    array.push(zone_box, bx)
-    array.push(zone_label, lb)
-
-f_process_tf(_tf, _rank) =>
-    ph = f_sec(_tf, ta.pivothigh(high, pivot_len, pivot_len))
-    pl = f_sec(_tf, ta.pivotlow(low, pivot_len, pivot_len))
-    atrh = f_sec(_tf, ta.atr(14))
-    pad = atrh * htf_zone_atr_mult
-    new_supply = not na(ph) and na(ph[1])
-    new_demand = not na(pl) and na(pl[1])
-    if new_supply
-        f_add_zone(ph + pad, ph - pad, -1, _tf, _rank)
-    if new_demand
-        f_add_zone(pl + pad, pl - pad, 1, _tf, _rank)
-
-f_process_tf(htf1_tf, 1)
-f_process_tf(htf2_tf, 2)
-
-// update + invalidation
-for i = 0 to array.size(zone_top) - 1
-    if array.get(zone_active, i)
-        t = array.get(zone_top, i)
-        b = array.get(zone_bot, i)
-        zt = array.get(zone_type, i)
-        zrank = array.get(zone_rank, i)
-        zat = f_sec(array.get(zone_tf, i), ta.atr(14))
-        inv_pad = zat * invalidate_atr_mult
-        touched = high >= b and low <= t
-        tc = array.get(zone_touches, i) + (touched ? 1 : 0)
-        age = bar_index - array.get(zone_created, i)
-        invalid = (zt == -1 and close > t + inv_pad) or (zt == 1 and close < b - inv_pad) or tc > max_touches or age > max_age_bars
-        bx = array.get(zone_box, i)
-        lb = array.get(zone_label, i)
-        if invalid
-            array.set(zone_active, i, false)
-            if not na(bx)
-                box.delete(bx)
-            if not na(lb)
-                label.delete(lb)
+f_prune_tf_type(string _tf, int _type) =>
+    while f_count_tf_type(_tf, _type) >= max_zones_per_tf
+        int kill = na
+        int oldest = 1000000000
+        for i = 0 to array.size(z_top) - 1
+            if array.get(z_tf, i) == _tf and array.get(z_type, i) == _type
+                int c = array.get(z_created, i)
+                if c < oldest
+                    oldest := c
+                    kill := i
+        if not na(kill)
+            f_del_box(array.get(z_box, kill))
+            f_del_label(array.get(z_label, kill))
+            array.remove(z_top, kill)
+            array.remove(z_bot, kill)
+            array.remove(z_type, kill)
+            array.remove(z_tf, kill)
+            array.remove(z_created, kill)
+            array.remove(z_touch, kill)
+            array.remove(z_active, kill)
+            array.remove(z_box, kill)
+            array.remove(z_label, kill)
+            array.remove(z_near_once, kill)
+            array.remove(z_in_once, kill)
         else
-            array.set(zone_touches, i, tc)
-            active_border = 1
-            c = f_zone_color(zt, zrank)
-            box.set_left(bx, time - chart_ms * math.min(age, 500))
-            box.set_right(bx, time + chart_ms * zone_extend_bars)
-            box.set_top(bx, t)
-            box.set_bottom(bx, b)
-            box.set_bgcolor(bx, c)
-            box.set_border_color(bx, color.new(c, 0))
-            box.set_border_width(bx, active_border)
-            label.set_x(lb, time)
-            label.set_y(lb, t)
-            label.set_text(lb, (zt == 1 ? "DEMAND " : "SUPPLY ") + array.get(zone_tf, i))
+            break
 
-// =========================
-// BIAS + ACTIVE ZONE
-// =========================
-ema_fast_htf = f_sec(htf2_tf, ta.ema(close, 20))
-ema_slow_htf = f_sec(htf2_tf, ta.ema(close, 50))
-bias = ema_fast_htf > ema_slow_htf ? 1 : ema_fast_htf < ema_slow_htf ? -1 : 0
-bias_txt = bias == 1 ? "BUY" : bias == -1 ? "SELL" : "NEUTRAL"
+f_add_zone(float _top, float _bot, int _type, string _tf) =>
+    f_prune_tf_type(_tf, _type)
+    color fill = _type == 1 ? color.new(color.green, _tf == htf1 ? 86 : 90) : color.new(color.red, _tf == htf1 ? 86 : 90)
+    color border = _type == 1 ? color.new(color.lime, 0) : color.new(color.orange, 0)
+    box b = f_box(bar_index, _top, bar_index + zone_extend_bars, _bot, fill, border, 1)
+    label lb = show_labels ? f_label(bar_index, _type == 1 ? _bot : _top, (_type == 1 ? "DEMAND " : "SUPPLY ") + _tf, color.new(color.black, 70), color.white, label.style_label_left) : na
+    array.push(z_top, _top)
+    array.push(z_bot, _bot)
+    array.push(z_type, _type)
+    array.push(z_tf, _tf)
+    array.push(z_created, bar_index)
+    array.push(z_touch, 0)
+    array.push(z_active, true)
+    array.push(z_box, b)
+    array.push(z_label, lb)
+    array.push(z_near_once, false)
+    array.push(z_in_once, false)
+
+f_process_htf(string _tf) =>
+    float pH = request.security(syminfo.tickerid, _tf, ta.pivothigh(high, pivot_left, pivot_right), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    float pL = request.security(syminfo.tickerid, _tf, ta.pivotlow(low, pivot_left, pivot_right), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    float atrH = request.security(syminfo.tickerid, _tf, ta.atr(14), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    bool newPH = not na(pH) and na(pH[1])
+    bool newPL = not na(pL) and na(pL[1])
+    if newPH
+        float pad = atrH * htf_zone_atr_mult
+        f_add_zone(pH + pad, pH - pad, -1, _tf)
+    if newPL
+        float pad = atrH * htf_zone_atr_mult
+        f_add_zone(pL + pad, pL - pad, 1, _tf)
+
+f_process_htf(htf1)
+f_process_htf(htf2)
+
+float atr = ta.atr(14)
+float near_thr = atr * near_thr_atr
+float invalidate_pad = atr * invalidate_atr_mult
+
+float htf1_close = request.security(syminfo.tickerid, htf1, close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float htf1_ema = request.security(syminfo.tickerid, htf1, ta.ema(close, 50), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+int bias = htf1_close > htf1_ema ? 1 : htf1_close < htf1_ema ? -1 : 0
 
 int active_idx = na
-float best_dist = 10e10
-for i = 0 to array.size(zone_top) - 1
-    if array.get(zone_active, i)
-        zt = array.get(zone_type, i)
-        bias_ok = bias == 0 or (bias == 1 and zt == 1) or (bias == -1 and zt == -1)
-        if bias_ok
-            d = f_dist_to_zone(close, array.get(zone_top, i), array.get(zone_bot, i))
-            if d < best_dist
-                best_dist := d
+float best_dist = 1000000000.0
+for i = 0 to array.size(z_top) - 1
+    bool active = array.get(z_active, i)
+    if active
+        float top = array.get(z_top, i)
+        float bot = array.get(z_bot, i)
+        int typ = array.get(z_type, i)
+        bool touched = close <= top and close >= bot
+        if touched
+            array.set(z_touch, i, array.get(z_touch, i) + 1)
+        int age = bar_index - array.get(z_created, i)
+        bool invalid = (typ == -1 and close > top + invalidate_pad) or (typ == 1 and close < bot - invalidate_pad) or array.get(z_touch, i) >= max_touches or age > max_age_bars
+        if invalid
+            array.set(z_active, i, false)
+        else
+            float dist = close > top ? close - top : close < bot ? bot - close : 0.0
+            bool pref = bias == 0 or (bias == 1 and typ == 1) or (bias == -1 and typ == -1)
+            float score = pref ? dist : dist + atr * 3
+            if score < best_dist
+                best_dist := score
                 active_idx := i
 
-if na(active_idx)
-    for i = 0 to array.size(zone_top) - 1
-        if array.get(zone_active, i)
-            d = f_dist_to_zone(close, array.get(zone_top, i), array.get(zone_bot, i))
-            if d < best_dist
-                best_dist := d
-                active_idx := i
+string stage = "FAR"
+string next_action = "Wait"
+string block_reason = ""
+bool near_buy = false
+bool near_sell = false
+bool in_buy = false
+bool in_sell = false
+bool entry_buy_sig = false
+bool entry_sell_sig = false
+bool blocked_sig = false
+bool zone_created_buy = false
+bool zone_created_sell = false
 
-float active_top = na
-float active_bot = na
-int active_type = 0
-string active_tf = "-"
-if not na(active_idx)
-    active_top := array.get(zone_top, active_idx)
-    active_bot := array.get(zone_bot, active_idx)
-    active_type := array.get(zone_type, active_idx)
-    active_tf := array.get(zone_tf, active_idx)
-    abx = array.get(zone_box, active_idx)
-    alb = array.get(zone_label, active_idx)
-    if not na(abx)
-        box.set_border_width(abx, 2)
-    if not na(alb)
-        label.set_text(alb, "ACTIVE " + (active_type == 1 ? "DEMAND " : "SUPPLY ") + active_tf)
+zone_created_buy := array.size(z_type) > 0 and array.get(z_created, array.size(z_created) - 1) == bar_index and array.get(z_type, array.size(z_type) - 1) == 1
+zone_created_sell := array.size(z_type) > 0 and array.get(z_created, array.size(z_created) - 1) == bar_index and array.get(z_type, array.size(z_type) - 1) == -1
 
-atr_ltf = ta.atr(14)
-near_thr = atr_ltf * near_thr_atr
-in_zone = not na(active_top) and f_in_zone(close, active_top, active_bot)
-near_zone = not na(active_top) and best_dist <= near_thr and not in_zone
+bool has_active = not na(active_idx)
+int active_type = has_active ? array.get(z_type, active_idx) : 0
+float active_top = has_active ? array.get(z_top, active_idx) : na
+float active_bot = has_active ? array.get(z_bot, active_idx) : na
+float active_dist = has_active ? (close > active_top ? close - active_top : close < active_bot ? active_bot - close : 0.0) : na
+bool inside_active = has_active and close <= active_top and close >= active_bot
 
-// =========================
-// LTF ENTRY ZONE
-// =========================
-ltf_allowed = not na(active_top) and best_dist <= atr_ltf * ltf_near_gate_atr
-ltf_src = f_sec(ltf_tf, ltf_zone_mode == "POC" ? ta.vwma(hlc3, ltf_len) : (ta.highest(high, ltf_len) + ta.lowest(low, ltf_len)) / 2.0)
-ltf_pad = atr_ltf * ltf_pad_atr
-ltf_top = ltf_src + ltf_pad
-ltf_bot = ltf_src - ltf_pad
+bool choch_buy = ta.crossover(close, ta.highest(high, 8)[1])
+bool choch_sell = ta.crossunder(close, ta.lowest(low, 8)[1])
+bool trap_buy = has_active and active_type == 1 and low[1] < active_bot and close > active_bot
+bool trap_sell = has_active and active_type == -1 and high[1] > active_top and close < active_top
+float rsi = ta.rsi(close, 14)
+[macd_line, macd_sig, _] = ta.macd(close, 12, 26, 9)
+bool rsi_macd_buy = rsi > 50 and macd_line > macd_sig
+bool rsi_macd_sell = rsi < 50 and macd_line < macd_sig
+float buy_risk = has_active ? close - active_bot : na
+float sell_risk = has_active ? active_top - close : na
+float buy_rr = buy_risk > 0 ? (atr * 3) / buy_risk : na
+float sell_rr = sell_risk > 0 ? (atr * 3) / sell_risk : na
+bool rr_buy_ok = not use_rr_gate or (not na(buy_rr) and buy_rr >= rr_min)
+bool rr_sell_ok = not use_rr_gate or (not na(sell_rr) and sell_rr >= rr_min)
+
 var box ltf_box = na
-if show_ltf_zone and ltf_allowed
-    if na(ltf_box)
-        ltf_box := box.new(time, ltf_top, time + chart_ms * zone_extend_bars, ltf_bot, xloc=xloc.bar_time, bgcolor=color.new(color.blue, 85), border_color=color.new(color.blue, 20), border_width=1)
+var label ltf_label = na
+if has_active and (inside_active or active_dist <= near_thr)
+    float l_top = na
+    float l_bot = na
+    if ltf_zone_mode == "POC"
+        float poc = ta.vwma(close, poc_len)
+        float pad = atr * poc_atr_mult
+        l_top := poc + pad
+        l_bot := poc - pad
     else
-        box.set_left(ltf_box, time - chart_ms * ltf_len)
-        box.set_right(ltf_box, time + chart_ms * zone_extend_bars)
-        box.set_top(ltf_box, ltf_top)
-        box.set_bottom(ltf_box, ltf_bot)
-else
-    if not na(ltf_box)
-        box.delete(ltf_box)
-        ltf_box := na
+        float hi = ta.highest(high, accum_len)
+        float lo = ta.lowest(low, accum_len)
+        bool ok = (hi - lo) <= atr * accum_max_atr
+        l_top := ok ? hi : na
+        l_bot := ok ? lo : na
+    if not na(l_top) and not na(l_bot)
+        if na(ltf_box)
+            ltf_box := f_box(bar_index, l_top, bar_index + zone_extend_bars, l_bot, color.new(color.aqua, 88), color.new(color.aqua, 0), 1)
+            ltf_label := show_labels ? f_label(bar_index, l_top, "ENTRY ZONE " + ltf, color.new(color.black, 70), color.white, label.style_label_left) : na
+        else
+            box.set_left(ltf_box, bar_index)
+            box.set_right(ltf_box, bar_index + zone_extend_bars)
+            box.set_top(ltf_box, l_top)
+            box.set_bottom(ltf_box, l_bot)
+            if not na(ltf_label)
+                label.set_x(ltf_label, bar_index)
+                label.set_y(ltf_label, l_top)
 
-// =========================
-// CONFIRM + ENTRY
-// =========================
-swing_hi = ta.highest(high, pivot_len)
-swing_lo = ta.lowest(low, pivot_len)
-choch_buy = close > swing_hi[1]
-choch_sell = close < swing_lo[1]
-trap_buy = low < active_bot and close > active_bot
-trap_sell = high > active_top and close < active_top
-rsi_v = ta.rsi(close, rsi_len)
-[macd_line, macd_signal, _] = ta.macd(close, macd_fast, macd_slow, macd_sig)
-filter_buy = rsi_v > 50 and macd_line > macd_signal
-filter_sell = rsi_v < 50 and macd_line < macd_signal
+if has_active
+    int zt = active_type
+    for i = 0 to array.size(z_top) - 1
+        if array.get(z_active, i)
+            box b = array.get(z_box, i)
+            float top = array.get(z_top, i)
+            float bot = array.get(z_bot, i)
+            box.set_left(b, array.get(z_created, i))
+            box.set_right(b, bar_index + zone_extend_bars)
+            box.set_top(b, top)
+            box.set_bottom(b, bot)
+            bool is_active = i == active_idx
+            box.set_border_width(b, is_active ? 2 : 1)
+            box.set_border_color(b, is_active ? color.yellow : (array.get(z_type, i) == 1 ? color.lime : color.orange))
+            label lb = array.get(z_label, i)
+            if not na(lb)
+                label.set_x(lb, bar_index)
+                label.set_y(lb, array.get(z_type, i) == 1 ? bot : top)
+                label.set_text(lb, (array.get(z_type, i) == 1 ? "DEMAND " : "SUPPLY ") + array.get(z_tf, i) + (is_active ? " ACTIVE" : ""))
 
-zone_h = math.max(0.0000001, math.abs(active_top - active_bot))
-rr_buy = (atr_ltf * 2.0) / zone_h
-rr_sell = (atr_ltf * 2.0) / zone_h
-rr_ok = (active_type == 1 and rr_buy >= rr_min) or (active_type == -1 and rr_sell >= rr_min)
+if has_active
+    if inside_active
+        stage := "IN_ZONE"
+        next_action := "Wait confirm"
+        in_buy := active_type == 1
+        in_sell := active_type == -1
+        bool pp_ok = not use_pp_confirm or (active_type == 1 ? choch_buy : choch_sell)
+        bool trap_ok = not use_trap_confirm or (active_type == 1 ? trap_buy : trap_sell)
+        bool osc_ok = not use_rsi_macd or (active_type == 1 ? rsi_macd_buy : rsi_macd_sell)
+        bool rr_ok = active_type == 1 ? rr_buy_ok : rr_sell_ok
+        bool confirm_ok = pp_ok and trap_ok and osc_ok and rr_ok
+        if confirm_ok
+            stage := "CONFIRM"
+            next_action := "Wait trigger"
+            bool trig_buy = active_type == 1 and ta.crossover(close, ta.highest(high, entry_break_len)[1])
+            bool trig_sell = active_type == -1 and ta.crossunder(close, ta.lowest(low, entry_break_len)[1])
+            if trig_buy or trig_sell
+                stage := "ENTRY"
+                next_action := trig_buy ? "▲ BUY" : "▼ SELL"
+                entry_buy_sig := trig_buy
+                entry_sell_sig := trig_sell
+                if trig_buy
+                    f_event("▲ BUY RR=" + str.tostring(buy_rr, "#.##"), low, color.new(color.green, 0), label.style_label_up)
+                if trig_sell
+                    f_event("▼ SELL RR=" + str.tostring(sell_rr, "#.##"), high, color.new(color.red, 0), label.style_label_down)
+        else
+            stage := "BLOCKED"
+            blocked_sig := true
+            block_reason := not pp_ok ? "PP" : not trap_ok ? "TRAP" : not osc_ok ? "RSI/MACD" : "RR"
+            next_action := "Fix " + block_reason
+    else if active_dist <= near_thr
+        stage := "NEAR"
+        next_action := active_type == 1 ? "⏳ prepare BUY" : "⏳ prepare SELL"
+        near_buy := active_type == 1
+        near_sell := active_type == -1
+        bool done = array.get(z_near_once, active_idx)
+        if not done
+            f_event(active_type == 1 ? "⏳ готовимся BUY" : "⏳ готовимся SELL", close, color.new(color.blue, 0), label.style_label_left)
+            array.set(z_near_once, active_idx, true)
+    else
+        stage := "FAR"
+        next_action := "Wait approach"
 
-confirm_buy = (not enable_choch or choch_buy) and (not enable_trap or trap_buy) and (not enable_filters or filter_buy) and (not enable_rr_gate or rr_ok)
-confirm_sell = (not enable_choch or choch_sell) and (not enable_trap or trap_sell) and (not enable_filters or filter_sell) and (not enable_rr_gate or rr_ok)
-trigger_buy = ta.crossover(close, ta.ema(close, entry_ema_len))
-trigger_sell = ta.crossunder(close, ta.ema(close, entry_ema_len))
-entry_buy = active_type == 1 and confirm_buy and trigger_buy and in_zone
-entry_sell = active_type == -1 and confirm_sell and trigger_sell and in_zone
+if has_active and inside_active and not array.get(z_in_once, active_idx)
+    f_event("⚡ IN ZONE", close, color.new(color.purple, 0), label.style_label_left)
+    array.set(z_in_once, active_idx, true)
 
-stage = "FAR"
-if near_zone
-    stage := "NEAR"
-if in_zone
-    stage := "IN_ZONE"
-if (active_type == 1 and confirm_buy and in_zone) or (active_type == -1 and confirm_sell and in_zone)
-    stage := "CONFIRM"
-if entry_buy or entry_sell
-    stage := "ENTRY"
+alertcondition(zone_created_buy, "zone_created_buy", "New BUY (demand) zone created")
+alertcondition(zone_created_sell, "zone_created_sell", "New SELL (supply) zone created")
+alertcondition(near_buy, "price_near_buy_zone", "Price is near BUY zone")
+alertcondition(near_sell, "price_near_sell_zone", "Price is near SELL zone")
+alertcondition(in_buy, "price_in_buy_zone", "Price is inside BUY zone")
+alertcondition(in_sell, "price_in_sell_zone", "Price is inside SELL zone")
+alertcondition(entry_buy_sig, "entry_buy", "ENTRY BUY trigger")
+alertcondition(entry_sell_sig, "entry_sell", "ENTRY SELL trigger")
+alertcondition(blocked_sig, "entry_blocked", "Entry blocked; check HUD block reason")
 
-blocked = in_zone and stage != "ENTRY" and ((active_type == 1 and not confirm_buy) or (active_type == -1 and not confirm_sell))
-block_reason = enable_rr_gate and not rr_ok ? "RR gate" : enable_filters and ((active_type == 1 and not filter_buy) or (active_type == -1 and not filter_sell)) ? "RSI/MACD" : enable_trap and ((active_type == 1 and not trap_buy) or (active_type == -1 and not trap_sell)) ? "Trap-return" : enable_choch and ((active_type == 1 and not choch_buy) or (active_type == -1 and not choch_sell)) ? "CHOCH/PP" : "No block"
-next_action = stage == "FAR" ? "Wait approach" : stage == "NEAR" ? "Prepare " + (active_type == 1 ? "BUY" : "SELL") : stage == "IN_ZONE" ? "Need confirm" : stage == "CONFIRM" ? "Wait trigger" : stage == "ENTRY" ? "Execute" : "Standby"
-
-near_buy_event = near_zone and active_type == 1 and not near_zone[1]
-near_sell_event = near_zone and active_type == -1 and not near_zone[1]
-in_buy_event = in_zone and active_type == 1 and not in_zone[1]
-in_sell_event = in_zone and active_type == -1 and not in_zone[1]
-
-plotshape(near_buy_event, title="Preparing BUY", text="⏳ BUY", style=shape.labelup, location=location.belowbar, color=color.new(color.green, 0), textcolor=color.white, size=size.tiny)
-plotshape(near_sell_event, title="Preparing SELL", text="⏳ SELL", style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0), textcolor=color.white, size=size.tiny)
-plotshape(in_buy_event, title="In BUY zone", text="⚡", style=shape.circle, location=location.belowbar, color=color.new(color.green, 0), textcolor=color.white, size=size.tiny)
-plotshape(in_sell_event, title="In SELL zone", text="⚡", style=shape.circle, location=location.abovebar, color=color.new(color.red, 0), textcolor=color.white, size=size.tiny)
-plotshape(entry_buy, title="ENTRY BUY", text="▲ BUY", style=shape.labelup, location=location.belowbar, color=color.new(color.lime, 0), textcolor=color.black, size=size.small)
-plotshape(entry_sell, title="ENTRY SELL", text="▼ SELL", style=shape.labeldown, location=location.abovebar, color=color.new(color.maroon, 0), textcolor=color.white, size=size.small)
-
-// =========================
-// HUD
-// =========================
-var table hud = table.new(position.top_right, 2, 5, border_width=1)
-if show_hud and barstate.islast
-    table.cell(hud, 0, 0, "Bias", text_color=color.white, bgcolor=color.new(color.gray, 70))
-    table.cell(hud, 1, 0, bias_txt, text_color=color.white)
-    table.cell(hud, 0, 1, "Active zone", text_color=color.white, bgcolor=color.new(color.gray, 70))
-    table.cell(hud, 1, 1, active_tf + " " + (active_type == 1 ? "DEMAND" : active_type == -1 ? "SUPPLY" : "-"), text_color=color.white)
-    table.cell(hud, 0, 2, "Stage", text_color=color.white, bgcolor=color.new(color.gray, 70))
-    table.cell(hud, 1, 2, stage, text_color=color.white)
-    table.cell(hud, 0, 3, "Next action", text_color=color.white, bgcolor=color.new(color.gray, 70))
+var table hud = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 80))
+if barstate.islast and show_hud
+    table.cell(hud, 0, 0, "Bias", text_color=color.white)
+    table.cell(hud, 1, 0, bias == 1 ? "BUY" : bias == -1 ? "SELL" : "NEUTRAL", text_color=bias == 1 ? color.lime : bias == -1 ? color.red : color.silver)
+    table.cell(hud, 0, 1, "Active zone", text_color=color.white)
+    string zone_txt = has_active ? (array.get(z_tf, active_idx) + " " + (active_type == 1 ? "DEMAND" : "SUPPLY")) : "none"
+    table.cell(hud, 1, 1, zone_txt, text_color=color.white)
+    table.cell(hud, 0, 2, "Stage", text_color=color.white)
+    table.cell(hud, 1, 2, stage, text_color=stage == "ENTRY" ? color.lime : stage == "BLOCKED" ? color.red : color.white)
+    table.cell(hud, 0, 3, "Next action", text_color=color.white)
     table.cell(hud, 1, 3, next_action, text_color=color.white)
-    table.cell(hud, 0, 4, "Block", text_color=color.white, bgcolor=color.new(color.gray, 70))
-    table.cell(hud, 1, 4, blocked ? block_reason : "-", text_color=color.white)
-
-// =========================
-// ALERTS
-// =========================
-new_buy_zone = false
-new_sell_zone = false
-if array.size(zone_type) > 0
-    last_i = array.size(zone_type) - 1
-    new_buy_zone := array.get(zone_active, last_i) and array.get(zone_type, last_i) == 1 and array.get(zone_created, last_i) == bar_index
-    new_sell_zone := array.get(zone_active, last_i) and array.get(zone_type, last_i) == -1 and array.get(zone_created, last_i) == bar_index
-
-alertcondition(new_buy_zone, "zone_created_buy", "BUY zone created")
-alertcondition(new_sell_zone, "zone_created_sell", "SELL zone created")
-alertcondition(near_buy_event, "price_near_buy_zone", "Price near BUY zone: готовимся BUY")
-alertcondition(near_sell_event, "price_near_sell_zone", "Price near SELL zone: готовимся SELL")
-alertcondition(in_buy_event, "price_in_buy_zone", "Price entered BUY zone")
-alertcondition(in_sell_event, "price_in_sell_zone", "Price entered SELL zone")
-alertcondition(entry_buy, "entry_buy", "▲ BUY entry trigger")
-alertcondition(entry_sell, "entry_sell", "▼ SELL entry trigger")
-alertcondition(blocked, "entry_blocked", "ENTRY blocked; check HUD reason")
+    table.cell(hud, 0, 4, "Block reason", text_color=color.white)
+    table.cell(hud, 1, 4, block_reason, text_color=color.orange)
