@@ -1,5 +1,16 @@
 # DEV Changelog
 
+## 2026-02-19 — v12 active-zone hysteresis + HUD bias source polish
+
+- Added active-zone anti-flicker hysteresis in `prizrak_trade_setup_detector_v12_0_0.pine`:
+  - New stage inputs: `active_hold_bars` and `active_switch_margin`.
+  - Active zone now remains sticky for a minimum hold window and switches only when a challenger is materially closer by margin.
+- Improved zone visual hierarchy:
+  - HTF1 zones use a thicker base border than HTF2.
+  - ACTIVE zone border width increased for clearer focus.
+- HUD bias line now shows source annotation (`BUY/SELL/NEUTRAL (PP|EMA)`) for UX clarity.
+- Refreshed `contract.lock.json` to capture intentional v12 input interface expansion.
+
 ## 2026-02-18 (docs follow-up)
 
 - Reworked `docs/PRIZRAK_TRADE_SETUP_DETECTOR_V2_ARCHITECTURE.md` to match the requested Russian full-architecture format verbatim (design-only, no Pine code).
