@@ -9,7 +9,7 @@
   },
   "inputs": {
     "count": 26,
-    "sha256": "198c52f75f210ee481108316affe62d47e321fc474ed17c024756d25f43cda69",
+    "sha256": "f88704c359bd9b8daa8c4ac6882519dad7d8e7877a2c6afa9b0948df1763a216",
     "lines": [
       "mode_tf = input.string(\"AUTO\", \"TF mode\", options=[\"AUTO\", \"MANUAL\"], group=\"TF Hierarchy\")",
       "manual_htf1 = input.timeframe(\"240\", \"Manual HTF1\", group=\"TF Hierarchy\")",
@@ -20,7 +20,7 @@
       "htf_zone_atr_mult = input.float(0.35, \"HTF zone ATR multiplier\", minval=0.05, step=0.05, group=\"Zone Engine • HTF\")",
       "invalidate_atr_mult = input.float(0.2, \"Invalidation ATR pad\", minval=0.0, step=0.05, group=\"Zone Engine • HTF\")",
       "max_zones_per_tf = input.int(6, \"Max zones per TF per side\", minval=1, maxval=20, group=\"Zone Engine • HTF\")",
-      "max_touches = input.int(5, \"Max touches before invalidate\", minval=1, maxval=20, group=\"Zone Engine • HTF\")",
+      "max_touches = input.int(5, \"Max touches before expire\", minval=1, maxval=20, group=\"Zone Engine • HTF\")",
       "max_age_bars = input.int(700, \"Max age bars\", minval=50, maxval=5000, group=\"Zone Engine • HTF\")",
       "zone_extend_bars = input.int(400, \"Zone extend bars\", minval=20, maxval=5000, group=\"Zone Engine • HTF\")",
       "ltf_zone_mode = input.string(\"POC\", \"LTF entry zone mode\", options=[\"POC\", \"ACCUM\"], group=\"Zone Engine • LTF\")",
@@ -40,18 +40,17 @@
     ]
   },
   "alerts": {
-    "count": 9,
-    "sha256": "b6043832a24500474c9e1e3facd536743450a550ff71375918e302af41e3a01f",
+    "count": 8,
+    "sha256": "f7d6ab184b3ce6063d7f48bd821137d285cebc8848fa969902a8f484133e6dc7",
     "lines": [
-      "alertcondition(zone_created_buy, \"zone_created_buy\", \"New BUY (demand) zone created\")",
-      "alertcondition(zone_created_sell, \"zone_created_sell\", \"New SELL (supply) zone created\")",
-      "alertcondition(near_buy, \"price_near_buy_zone\", \"Price is near BUY zone\")",
-      "alertcondition(near_sell, \"price_near_sell_zone\", \"Price is near SELL zone\")",
-      "alertcondition(in_buy, \"price_in_buy_zone\", \"Price is inside BUY zone\")",
-      "alertcondition(in_sell, \"price_in_sell_zone\", \"Price is inside SELL zone\")",
-      "alertcondition(entry_buy_sig, \"entry_buy\", \"ENTRY BUY trigger\")",
-      "alertcondition(entry_sell_sig, \"entry_sell\", \"ENTRY SELL trigger\")",
-      "alertcondition(blocked_sig, \"entry_blocked\", \"Entry blocked; check HUD block reason\")"
+      "alertcondition(near_edge and active_type == 1, \"price_near_buy_zone\", \"Stage change FAR->NEAR BUY\")",
+      "alertcondition(near_edge and active_type == -1, \"price_near_sell_zone\", \"Stage change FAR->NEAR SELL\")",
+      "alertcondition(in_zone_edge and active_type == 1, \"price_in_buy_zone\", \"Stage change NEAR->IN_ZONE BUY\")",
+      "alertcondition(in_zone_edge and active_type == -1, \"price_in_sell_zone\", \"Stage change NEAR->IN_ZONE SELL\")",
+      "alertcondition(entry_edge and entry_buy_sig, \"entry_buy\", \"ENTRY BUY on stage transition\")",
+      "alertcondition(entry_edge and entry_sell_sig, \"entry_sell\", \"ENTRY SELL on stage transition\")",
+      "alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_buy_sig, \"blocked_buy\", \"BUY blocked on stage transition\")",
+      "alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_sell_sig, \"blocked_sell\", \"SELL blocked on stage transition\")"
     ]
   }
 }

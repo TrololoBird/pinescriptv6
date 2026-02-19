@@ -46,6 +46,28 @@ def main() -> int:
         if "lookahead=barmerge.lookahead_off" not in ln or "gaps=barmerge.gaps_off" not in ln:
             fail(f"request.security at line {i} must set gaps_off + lookahead_off")
 
+    if "lookahead=barmerge.lookahead_on" in text.replace(" ", ""):
+        fail("Forbidden lookahead_on usage detected")
+
+    if len(security_lines) > 6:
+        fail(f"request.security budget exceeded: {len(security_lines)} > 6")
+
+    indicator_line = next((ln.replace(" ", "") for ln in lines if ln.strip().startswith("indicator(")), "")
+    if "max_boxes_count=" in indicator_line:
+        m = re.search(r"max_boxes_count=(\d+)", indicator_line)
+        if m and int(m.group(1)) > 300:
+            fail("max_boxes_count must be <= 300")
+    if "max_labels_count=" in indicator_line:
+        m = re.search(r"max_labels_count=(\d+)", indicator_line)
+        if m and int(m.group(1)) > 300:
+            fail("max_labels_count must be <= 300")
+
+    zcap_hits = [ln for ln in lines if "max_zones_per_tf = input.int" in ln]
+    if zcap_hits:
+        m = re.search(r"maxval\s*=\s*(\d+)", zcap_hits[0])
+        if m and int(m.group(1)) > 20:
+            fail("max_zones_per_tf input maxval must be <= 20")
+
     print("Lint guard OK.")
     return 0
 
