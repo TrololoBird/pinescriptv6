@@ -103,3 +103,10 @@
   - buy fill -> green-based
   - sell fill -> red-based
   - PP/CHOCH marker -> purple
+
+## 2026-02-19 — v12.0.0 interface + product rewrite
+
+- Added new canonical script `prizrak_trade_setup_detector_v12_0_0.pine` as a product-oriented rewrite (zones → prepare → entry flow).
+- Introduced AUTO/Manual MTF hierarchy inputs, HTF zone engine, LTF entry-zone modes (POC/ACCUM), stage machine (FAR/NEAR/IN_ZONE/CONFIRM/ENTRY/BLOCKED), HUD, and new alert set.
+- Updated toolchain to target v12 as canonical (`tools/contract_guard.py`, `tools/lint_guard.py`, `tools/tv_export.py`).
+- Refreshed `contract.lock.json` to match v12 interface.

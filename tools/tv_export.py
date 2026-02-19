@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-PINE_FILE = Path("prizrak_trade_setup_detector_v11_7_0.pine")
+PINE_FILE = Path("prizrak_trade_setup_detector_v12_0_0.pine")
 
 
 def strip_comments(text: str) -> str:
