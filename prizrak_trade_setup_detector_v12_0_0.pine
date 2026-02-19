@@ -27,6 +27,8 @@ min_touches = input.int(4, "Flat min touches", minval=2, maxval=20, group="Zone 
 exit_confirm_bars = input.int(2, "Flat exit confirm bars", minval=1, maxval=10, group="Zone Engine • LTF")
 
 near_thr_atr = input.float(0.9, "Near threshold ATR multiple", minval=0.1, step=0.1, group="Stages")
+active_hold_bars = input.int(3, "Active zone hold bars", minval=0, maxval=50, group="Stages")
+active_switch_margin = input.float(0.15, "Active zone switch margin", minval=0.0, maxval=0.9, step=0.05, group="Stages")
 use_pp_confirm = input.bool(true, "Use CHOCH/PP confirm", group="Stages")
 use_trap_confirm = input.bool(true, "Use trap-return confirm", group="Stages")
 use_rsi_macd = input.bool(true, "Use RSI + MACD filter", group="Stages")
@@ -446,6 +448,33 @@ for i = 0 to array.size(z_top) - 1
             best_age := age
             best_touches := touches
 
+var int sticky_zone_id = -1
+var int sticky_zone_since = na
+int sticky_idx = na
+if sticky_zone_id != -1
+    for i = 0 to array.size(z_top) - 1
+        if array.get(z_id, i) == sticky_zone_id
+            sticky_idx := i
+            break
+
+if not na(active_idx)
+    if not na(sticky_idx) and sticky_idx != active_idx
+        float sticky_top = array.get(z_top, sticky_idx)
+        float sticky_bot = array.get(z_bot, sticky_idx)
+        float sticky_dist = close > sticky_top ? close - sticky_top : close < sticky_bot ? sticky_bot - close : 0.0
+        int held_bars = na(sticky_zone_since) ? 0 : (bar_index - sticky_zone_since)
+        bool hold_lock = held_bars < active_hold_bars
+        bool significantly_better = best_dist < sticky_dist * (1.0 - active_switch_margin)
+        if hold_lock or not significantly_better
+            active_idx := sticky_idx
+            best_dist := sticky_dist
+    sticky_zone_id := array.get(z_id, active_idx)
+    if sticky_zone_id != sticky_zone_id[1]
+        sticky_zone_since := bar_index
+else
+    sticky_zone_id := -1
+    sticky_zone_since := na
+
 bool has_active = not na(active_idx)
 int active_type = has_active ? array.get(z_type, active_idx) : 0
 float active_top = has_active ? array.get(z_top, active_idx) : na
@@ -669,7 +698,9 @@ for i = 0 to array.size(z_top) - 1
         array.set(z_right_time, i, r_time)
     color base = array.get(z_type, i) == 1 ? color.lime : color.orange
     color border = i == active_idx ? color.yellow : base
-    int width = i == active_idx ? 2 : 1
+    bool is_htf1 = array.get(z_tf, i) == htf1
+    int base_width = is_htf1 ? 2 : 1
+    int width = i == active_idx ? 3 : base_width
     box.set_left(b, p_time)
     box.set_right(b, r_time)
     box.set_top(b, top)
@@ -738,7 +769,8 @@ prev_active_zone_id := active_zone_id
 var table hud = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 80))
 if barstate.islast and show_hud
     table.cell(hud, 0, 0, "Bias", text_color=color.white)
-    table.cell(hud, 1, 0, bias == 1 ? "BUY" : bias == -1 ? "SELL" : "NEUTRAL", text_color=bias == 1 ? color.lime : bias == -1 ? color.red : color.silver)
+    string bias_src = bias_mode == "PP" ? "PP" : "EMA"
+    table.cell(hud, 1, 0, (bias == 1 ? "BUY" : bias == -1 ? "SELL" : "NEUTRAL") + " (" + bias_src + ")", text_color=bias == 1 ? color.lime : bias == -1 ? color.red : color.silver)
     table.cell(hud, 0, 1, "Active zone", text_color=color.white)
     string zone_txt = has_active ? (array.get(z_tf, active_idx) + " " + (active_type == 1 ? "DEMAND" : "SUPPLY") + " #" + str.tostring(active_zone_id)) : "none"
     table.cell(hud, 1, 1, zone_txt, text_color=color.white)
