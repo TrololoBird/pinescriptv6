@@ -127,6 +127,14 @@ f_flat_state_ltf(int _len, float _touch_tol, int _min_touches, int _exit_confirm
     bool valid = rng <= atrv * _max_range_atr and cand_touch_top >= _min_touches and cand_touch_bot >= _min_touches
     [valid ? cand_high : na, valid ? cand_low : na, valid]
 
+f_ltf_bundle() =>
+    float atr_ltf_local = ta.atr(14)
+    float poc_ltf_local = f_poc_profile_last_n(poc_len, poc_bins, poc_price_mode)
+    float accum_hi_local = ta.highest(high, accum_len)
+    float accum_lo_local = ta.lowest(low, accum_len)
+    [fh, fl, fv] = f_flat_state_ltf(accum_len, touch_tolerance, min_touches, exit_confirm_bars, accum_max_atr)
+    [atr_ltf_local, poc_ltf_local, accum_hi_local, accum_lo_local, fh, fl, fv]
+
 var float[] z_top = array.new_float()
 var float[] z_bot = array.new_float()
 var int[] z_type = array.new_int() // 1 demand, -1 supply
@@ -477,7 +485,8 @@ bool entry_sell_sig = false
 bool blocked_buy_sig = false
 bool blocked_sell_sig = false
 
-bool pp_ok = not use_pp_confirm or (not pp_block_all and ((active_type == 1 and pp_confirm_dir == -1) or (active_type == -1 and pp_confirm_dir == 1) or pp_state >= 3))
+bool pp_dir_ok = (active_type == 1 and pp_confirm_dir == 1) or (active_type == -1 and pp_confirm_dir == -1)
+bool pp_ok = not use_pp_confirm or (not pp_block_all and pp_state >= 3 and pp_dir_ok)
 bool trap_ok = not use_trap_confirm or (active_type == 1 ? trap_buy : trap_sell)
 bool osc_ok = not use_rsi_macd or (active_type == 1 ? rsi_macd_buy : rsi_macd_sell)
 bool rr_ok = active_type == 1 ? rr_buy_ok : rr_sell_ok
@@ -533,9 +542,11 @@ else
 
 var string prev_stage = ""
 var int prev_active_zone_id = -1
-bool stage_changed = stage != prev_stage or active_zone_id != prev_active_zone_id
+bool stage_transition = stage != prev_stage
+bool zone_changed = active_zone_id != prev_active_zone_id
+bool stage_changed = stage_transition or zone_changed
 
-if stage_changed and show_labels
+if stage_transition and show_labels
     if prev_stage == STAGE_FAR and stage == STAGE_NEAR
         f_event("⏳ " + (active_type == 1 ? "NEAR BUY" : "NEAR SELL"), close, color.new(color.blue, 0), label.style_label_left)
     if prev_stage == STAGE_NEAR and stage == STAGE_IN_ZONE
@@ -548,8 +559,9 @@ if stage_changed and show_labels
 
 var box ltf_box = na
 var label ltf_label = na
-[atr_ltf, poc_ltf, accum_hi, accum_lo, flat_hi, flat_lo, flat_valid] = request.security(syminfo.tickerid, ltf, [ta.atr(14), f_poc_profile_last_n(poc_len, poc_bins, poc_price_mode), ta.highest(high, accum_len), ta.lowest(low, accum_len), f_flat_state_ltf(accum_len, touch_tolerance, min_touches, exit_confirm_bars, accum_max_atr)[0], f_flat_state_ltf(accum_len, touch_tolerance, min_touches, exit_confirm_bars, accum_max_atr)[1], f_flat_state_ltf(accum_len, touch_tolerance, min_touches, exit_confirm_bars, accum_max_atr)[2]], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
-bool allow_ltf = has_active and (stage == STAGE_FAR or stage == STAGE_NEAR or stage == STAGE_IN_ZONE)
+var int ltf_left_time = na
+[atr_ltf, poc_ltf, accum_hi, accum_lo, flat_hi, flat_lo, flat_valid] = request.security(syminfo.tickerid, ltf, f_ltf_bundle(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+bool allow_ltf = has_active and (stage == STAGE_FAR or stage == STAGE_NEAR or stage == STAGE_IN_ZONE or stage == STAGE_CONFIRM or stage == STAGE_BLOCKED or stage == STAGE_ENTRY)
 bool ltf_fallback = not has_active
 if allow_ltf or ltf_fallback
     float l_top = na
@@ -567,11 +579,12 @@ if allow_ltf or ltf_fallback
         l_bot := ok ? accum_lo : na
     if not na(l_top) and not na(l_bot)
         if na(ltf_box)
+            ltf_left_time := time
             ltf_box := f_box(time, l_top, time + tf_sec * 1000 * zone_extend_bars, l_bot, color.new(color.aqua, 88), color.new(color.aqua, 0), 1)
             string ltf_title = ltf_fallback ? "ENTRY ZONE " + ltf + " (NO HTF CONTEXT)" : "ENTRY ZONE " + ltf
             ltf_label := show_labels ? f_label(time, l_top, ltf_title, color.new(color.black, 70), color.white, label.style_label_left) : na
         else
-            box.set_left(ltf_box, time)
+            box.set_left(ltf_box, ltf_left_time)
             box.set_right(ltf_box, time + tf_sec * 1000 * zone_extend_bars)
             box.set_top(ltf_box, l_top)
             box.set_bottom(ltf_box, l_bot)
@@ -584,11 +597,13 @@ if allow_ltf or ltf_fallback
         f_del_label(ltf_label)
         ltf_box := na
         ltf_label := na
+        ltf_left_time := na
 else
     f_del_box(ltf_box)
     f_del_label(ltf_label)
     ltf_box := na
     ltf_label := na
+    ltf_left_time := na
 
 var label active_label = na
 if has_active and show_labels
@@ -641,9 +656,9 @@ bool stage_confirm = stage == STAGE_CONFIRM
 bool stage_entry = stage == STAGE_ENTRY
 bool stage_blocked = stage == STAGE_BLOCKED
 
-bool near_edge = stage_changed and stage == STAGE_NEAR
-bool in_zone_edge = stage_changed and stage == STAGE_IN_ZONE
-bool entry_edge = stage_changed and stage == STAGE_ENTRY
+bool near_edge = stage_transition and prev_stage == STAGE_FAR and stage == STAGE_NEAR
+bool in_zone_edge = stage_transition and prev_stage == STAGE_NEAR and stage == STAGE_IN_ZONE
+bool entry_edge = stage_transition and stage == STAGE_ENTRY
 
 if show_rr_history and entry_edge
     float rr_entry = close
@@ -673,8 +688,9 @@ alertcondition(in_zone_edge and active_type == 1, "price_in_buy_zone", "Stage ch
 alertcondition(in_zone_edge and active_type == -1, "price_in_sell_zone", "Stage change NEAR->IN_ZONE SELL")
 alertcondition(entry_edge and entry_buy_sig, "entry_buy", "ENTRY BUY on stage transition")
 alertcondition(entry_edge and entry_sell_sig, "entry_sell", "ENTRY SELL on stage transition")
-alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_buy_sig, "blocked_buy", "BUY blocked on stage transition")
-alertcondition(stage_changed and stage == STAGE_BLOCKED and blocked_sell_sig, "blocked_sell", "SELL blocked on stage transition")
+alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_buy_sig, "blocked_buy", "BUY blocked on stage transition")
+alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_sell_sig, "blocked_sell", "SELL blocked on stage transition")
+alertcondition(zone_changed and has_active, "active_zone_changed", "Active zone changed")
 alertcondition(zone_created_demand, "zone_created_demand", "DEMAND zone created")
 alertcondition(zone_created_supply, "zone_created_supply", "SUPPLY zone created")
 alertcondition(zone_invalidated_demand, "zone_invalidated_demand", "DEMAND zone invalidated")
@@ -683,7 +699,7 @@ alertcondition(zone_invalidated_supply, "zone_invalidated_supply", "SUPPLY zone 
 prev_stage := stage
 prev_active_zone_id := active_zone_id
 
-var table hud = table.new(position.top_right, 2, 9, bgcolor=color.new(color.black, 80))
+var table hud = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 80))
 if barstate.islast and show_hud
     table.cell(hud, 0, 0, "Bias", text_color=color.white)
     table.cell(hud, 1, 0, bias == 1 ? "BUY" : bias == -1 ? "SELL" : "NEUTRAL", text_color=bias == 1 ? color.lime : bias == -1 ? color.red : color.silver)
@@ -705,3 +721,5 @@ if barstate.islast and show_hud
     table.cell(hud, 0, 8, "Touches/Age", text_color=color.white)
     string ta_txt = has_active ? str.tostring(array.get(z_touch, active_idx)) + "/" + str.tostring(f_zone_age_bars(active_idx)) : "n/a"
     table.cell(hud, 1, 8, ta_txt, text_color=color.silver)
+    table.cell(hud, 0, 9, "PP: trend/state/dir", text_color=color.white)
+    table.cell(hud, 1, 9, str.tostring(pp_trend_dir) + "/" + str.tostring(pp_state) + "/" + str.tostring(pp_confirm_dir), text_color=color.silver)
