@@ -5,6 +5,7 @@ mode_tf = input.string("AUTO", "TF mode", options=["AUTO", "MANUAL"], group="TF 
 manual_htf1 = input.timeframe("240", "Manual HTF1", group="TF Hierarchy")
 manual_htf2 = input.timeframe("60", "Manual HTF2", group="TF Hierarchy")
 manual_ltf = input.timeframe("", "Manual LTF (blank = chart)", group="TF Hierarchy")
+auto_ltf_mode = input.string("AUTO_BY_CHART", "AUTO LTF mode", options=["AUTO_BY_CHART", "AUTO_BY_HTF2", "CHART"], group="TF Hierarchy")
 
 pivot_left = input.int(3, "Pivot left bars", minval=1, maxval=20, group="Zone Engine • HTF")
 pivot_right = input.int(3, "Pivot right bars", minval=1, maxval=20, group="Zone Engine • HTF")
@@ -45,6 +46,9 @@ pp_retest_bars = input.int(3, "PP retest bars", minval=1, maxval=20, group="Stag
 pp_confirm_bars = input.int(2, "PP confirm bars", minval=1, maxval=10, group="Stages")
 pp_confirm_vol_mult = input.float(1.0, "PP volume >= MA *", minval=0.2, step=0.1, group="Stages")
 entry_break_len = input.int(2, "Entry trigger lookback", minval=1, maxval=10, group="Stages")
+use_ltf_entry_gate = input.bool(true, "Require LTF entry zone for ENTRY", group="Stages")
+ltf_gate_mode = input.string("INSIDE", "LTF gate mode", options=["INSIDE", "NEAR"], group="Stages")
+ltf_near_atr = input.float(0.3, "LTF near ATR mult", minval=0.0, step=0.05, group="Stages")
 
 show_hud = input.bool(true, "Show HUD", group="Visual")
 show_labels = input.bool(true, "Show labels/icons", group="Visual")
@@ -66,10 +70,11 @@ string STAGE_BLOCKED = "BLOCKED"
 int tf_sec = timeframe.in_seconds()
 string auto_htf1 = tf_sec <= 15 * 60 ? "240" : tf_sec <= 60 * 60 ? "D" : "W"
 string auto_htf2 = tf_sec <= 15 * 60 ? "60" : tf_sec <= 60 * 60 ? "240" : "D"
-string auto_ltf = timeframe.period
+string auto_ltf_by_chart = tf_sec <= 15 * 60 ? "5" : tf_sec <= 60 * 60 ? "15" : tf_sec <= 4 * 60 * 60 ? "60" : tf_sec <= 24 * 60 * 60 ? "240" : "240"
 string htf1 = mode_tf == "AUTO" ? auto_htf1 : manual_htf1
 string htf2 = mode_tf == "AUTO" ? auto_htf2 : manual_htf2
-string ltf = mode_tf == "AUTO" ? auto_ltf : (str.length(manual_ltf) == 0 ? timeframe.period : manual_ltf)
+string ltf_auto = auto_ltf_mode == "CHART" ? timeframe.period : auto_ltf_mode == "AUTO_BY_HTF2" ? htf2 : auto_ltf_by_chart
+string ltf = mode_tf == "AUTO" ? ltf_auto : (str.length(manual_ltf) == 0 ? timeframe.period : manual_ltf)
 
 f_box(int _l, float _t, int _r, float _b, color _bg, color _bd, int _bw) => box.new(_l, _t, _r, _b, xloc=xloc.bar_time, bgcolor=_bg, border_color=_bd, border_width=_bw)
 f_label(int _x, float _y, string _txt, color _bg, color _tc, int _style) => label.new(_x, _y, _txt, xloc=xloc.bar_time, style=_style, textcolor=_tc, color=_bg)
@@ -527,6 +532,26 @@ float sell_rr = math.max(sell_rr_main, sell_rr_ext)
 bool rr_buy_ok = not use_rr_gate or (not na(buy_rr) and buy_rr >= rr_min)
 bool rr_sell_ok = not use_rr_gate or (not na(sell_rr) and sell_rr >= rr_min)
 
+float l_top = na
+float l_bot = na
+if ltf_zone_mode == "POC"
+    float pad = math.max(atr_ltf * poc_atr_mult, syminfo.mintick)
+    l_top := poc_ltf + pad
+    l_bot := poc_ltf - pad
+else if ltf_zone_mode == "FLAT"
+    l_top := flat_valid ? flat_hi : na
+    l_bot := flat_valid ? flat_lo : na
+else
+    bool ok = not na(accum_hi) and not na(accum_lo) and not na(atr_ltf) and (accum_hi - accum_lo) <= atr_ltf * accum_max_atr
+    l_top := ok ? accum_hi : na
+    l_bot := ok ? accum_lo : na
+bool ltf_valid = not na(l_top) and not na(l_bot)
+bool ltf_inside = ltf_valid and close <= l_top and close >= l_bot
+float ltf_atr = atr_ltf
+float ltf_dist = not ltf_valid ? na : close > l_top ? close - l_top : close < l_bot ? l_bot - close : 0.0
+bool ltf_near = ltf_valid and not na(ltf_atr) and ltf_dist <= (ltf_atr * ltf_near_atr)
+bool ltf_gate_ok = not use_ltf_entry_gate or (ltf_gate_mode == "INSIDE" ? ltf_inside : ltf_near)
+
 string stage = STAGE_FAR
 string next_action = "Wait approach"
 string block_reason_code = "NONE"
@@ -553,16 +578,21 @@ if has_active
         next_action := "Watch confirm"
         if rr_ok and pp_ok and trap_ok and osc_ok
             stage := STAGE_CONFIRM
-            ready_reason_code := "ALL_FILTERS_OK"
-            ready_reason_text := "All confirms passed; waiting breakout trigger"
-            next_action := "Wait entry trigger"
-            if trig_ok
-                stage := STAGE_ENTRY
-                block_reason_code := "NONE"
-                block_reason_text := ""
-                next_action := trig_buy ? "▲ BUY RR=" + str.tostring(buy_rr, "#.##") : "▼ SELL RR=" + str.tostring(sell_rr, "#.##")
-                entry_buy_sig := trig_buy
-                entry_sell_sig := trig_sell
+            if not ltf_gate_ok
+                ready_reason_code := "WAIT_LTF"
+                ready_reason_text := "All filters passed; waiting LTF entry zone"
+                next_action := "Wait LTF entry zone"
+            else
+                ready_reason_code := "ALL_FILTERS_OK"
+                ready_reason_text := "All confirms passed; waiting breakout trigger"
+                next_action := "Wait entry trigger"
+                if trig_ok
+                    stage := STAGE_ENTRY
+                    block_reason_code := "NONE"
+                    block_reason_text := ""
+                    next_action := trig_buy ? "▲ BUY RR=" + str.tostring(buy_rr, "#.##") : "▼ SELL RR=" + str.tostring(sell_rr, "#.##")
+                    entry_buy_sig := trig_buy
+                    entry_sell_sig := trig_sell
         else
             stage := STAGE_BLOCKED
             if not rr_ok
@@ -597,6 +627,7 @@ var string prev_stage = ""
 var int prev_active_zone_id = -1
 var bool prev_near_now = false
 var bool prev_inside_now = false
+var bool prev_ltf_inside = false
 bool stage_transition = stage != prev_stage
 bool zone_changed = active_zone_id != prev_active_zone_id
 bool stage_changed = stage_transition or zone_changed
@@ -604,17 +635,21 @@ bool stage_changed = stage_transition or zone_changed
 if zone_changed
     prev_near_now := false
     prev_inside_now := false
+    prev_ltf_inside := false
 
 bool near_now = has_active and not inside_active and active_dist <= near_thr
 bool inside_now = inside_active
 bool near_edge = near_now and not prev_near_now
 bool in_zone_edge = inside_now and not prev_inside_now
+bool ltf_edge = ltf_inside and not prev_ltf_inside
 
 if show_labels
     if near_edge
         f_event("⏳ " + (active_type == 1 ? "NEAR BUY" : "NEAR SELL"), close, color.new(color.blue, 0), label.style_label_left)
     if in_zone_edge
         f_event("⚡ IN ZONE", close, color.new(color.purple, 0), label.style_label_left)
+    if ltf_edge
+        f_event("🎯 LTF ZONE", close, color.new(color.aqua, 0), label.style_label_left)
     if stage_transition and stage == STAGE_ENTRY
         if entry_buy_sig
             f_event("▲ BUY RR=" + str.tostring(buy_rr, "#.##"), low, color.new(color.green, 0), label.style_label_up)
@@ -624,23 +659,9 @@ if show_labels
 var box ltf_box = na
 var label ltf_label = na
 var int ltf_left_time = na
-[atr_ltf, poc_ltf, accum_hi, accum_lo, flat_hi, flat_lo, flat_valid] = request.security(syminfo.tickerid, ltf, f_ltf_bundle(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 bool allow_ltf = has_active and (stage == STAGE_FAR or stage == STAGE_NEAR or stage == STAGE_IN_ZONE or stage == STAGE_CONFIRM or stage == STAGE_BLOCKED or stage == STAGE_ENTRY)
 bool ltf_fallback = not has_active
 if allow_ltf or ltf_fallback
-    float l_top = na
-    float l_bot = na
-    if ltf_zone_mode == "POC"
-        float pad = math.max(atr_ltf * poc_atr_mult, syminfo.mintick)
-        l_top := poc_ltf + pad
-        l_bot := poc_ltf - pad
-    else if ltf_zone_mode == "FLAT"
-        l_top := flat_valid ? flat_hi : na
-        l_bot := flat_valid ? flat_lo : na
-    else
-        bool ok = not na(accum_hi) and not na(accum_lo) and not na(atr_ltf) and (accum_hi - accum_lo) <= atr_ltf * accum_max_atr
-        l_top := ok ? accum_hi : na
-        l_bot := ok ? accum_lo : na
     if not na(l_top) and not na(l_bot)
         if na(ltf_box)
             ltf_left_time := time
@@ -671,7 +692,7 @@ else
 
 var label active_label = na
 if has_active and show_labels
-    string active_text = "ACTIVE " + (active_type == 1 ? "DEMAND " : "SUPPLY ") + array.get(z_tf, active_idx) + " | stage=" + stage + " | next=" + next_action
+    string active_text = "ACTIVE " + (active_type == 1 ? "DEMAND " : "SUPPLY ") + array.get(z_tf, active_idx) + " | TF: " + htf1 + "/" + htf2 + "/" + ltf + " | stage=" + stage + " | next=" + next_action
     float active_y = close
     if na(active_label)
         active_label := f_label(time, active_y, active_text, color.new(color.black, 70), color.white, label.style_label_left)
@@ -699,7 +720,8 @@ for i = 0 to array.size(z_top) - 1
     color base = array.get(z_type, i) == 1 ? color.lime : color.orange
     color border = i == active_idx ? color.yellow : base
     bool is_htf1 = array.get(z_tf, i) == htf1
-    int base_width = is_htf1 ? 2 : 1
+    bool is_htf2 = array.get(z_tf, i) == htf2
+    int base_width = is_htf1 ? 2 : is_htf2 ? 2 : 1
     int width = i == active_idx ? 3 : base_width
     box.set_left(b, p_time)
     box.set_right(b, r_time)
@@ -707,7 +729,7 @@ for i = 0 to array.size(z_top) - 1
     box.set_bottom(b, bot)
     box.set_border_width(b, width)
     box.set_border_color(b, is_live ? border : color.new(color.gray, 20))
-    int fill_alpha = is_htf1 ? 86 : 90
+    int fill_alpha = is_htf1 ? 84 : is_htf2 ? 88 : 90
     box.set_bgcolor(b, is_live ? (array.get(z_type, i) == 1 ? color.new(color.green, fill_alpha) : color.new(color.red, fill_alpha)) : color.new(color.gray, 92))
     label lb = array.get(z_label, i)
     if not na(lb)
@@ -751,6 +773,8 @@ alertcondition(near_edge and active_type == 1, "price_near_buy_zone", "Price NEA
 alertcondition(near_edge and active_type == -1, "price_near_sell_zone", "Price NEAR SELL zone")
 alertcondition(in_zone_edge and active_type == 1, "price_in_buy_zone", "Price entered BUY zone")
 alertcondition(in_zone_edge and active_type == -1, "price_in_sell_zone", "Price entered SELL zone")
+alertcondition(ltf_edge and active_type == 1, "price_in_ltf_buy_zone", "Price entered LTF BUY entry zone")
+alertcondition(ltf_edge and active_type == -1, "price_in_ltf_sell_zone", "Price entered LTF SELL entry zone")
 alertcondition(entry_edge and entry_buy_sig, "entry_buy", "ENTRY BUY on stage transition")
 alertcondition(entry_edge and entry_sell_sig, "entry_sell", "ENTRY SELL on stage transition")
 alertcondition(stage_transition and stage == STAGE_BLOCKED and blocked_buy_sig, "blocked_buy", "BUY blocked on stage transition")
@@ -763,11 +787,12 @@ alertcondition(zone_invalidated_supply, "zone_invalidated_supply", "SUPPLY zone 
 
 prev_near_now := near_now
 prev_inside_now := inside_now
+prev_ltf_inside := ltf_inside
 
 prev_stage := stage
 prev_active_zone_id := active_zone_id
 
-var table hud = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 80))
+var table hud = table.new(position.top_right, 2, 11, bgcolor=color.new(color.black, 80))
 if barstate.islast and show_hud
     table.cell(hud, 0, 0, "Bias", text_color=color.white)
     string bias_src = bias_mode == "PP" ? "PP" : "EMA"
@@ -787,8 +812,10 @@ if barstate.islast and show_hud
     table.cell(hud, 1, 6, stage == STAGE_BLOCKED ? block_reason_code : ready_reason_code, text_color=color.orange)
     table.cell(hud, 0, 7, "Block text", text_color=color.white)
     table.cell(hud, 1, 7, stage == STAGE_BLOCKED ? block_reason_text : ready_reason_text, text_color=color.orange)
-    table.cell(hud, 0, 8, "Touches/Age", text_color=color.white)
+    table.cell(hud, 0, 8, "TF", text_color=color.white)
+    table.cell(hud, 1, 8, htf1 + "/" + htf2 + "/" + ltf, text_color=color.silver)
+    table.cell(hud, 0, 9, "Touches/Age", text_color=color.white)
     string ta_txt = has_active ? str.tostring(array.get(z_touch, active_idx)) + "/" + str.tostring(f_zone_age_bars(active_idx)) : "n/a"
-    table.cell(hud, 1, 8, ta_txt, text_color=color.silver)
-    table.cell(hud, 0, 9, "PP: trend/state/dir", text_color=color.white)
-    table.cell(hud, 1, 9, str.tostring(pp_trend_dir) + "/" + str.tostring(pp_state) + "/" + str.tostring(pp_confirm_dir), text_color=color.silver)
+    table.cell(hud, 1, 9, ta_txt, text_color=color.silver)
+    table.cell(hud, 0, 10, "PP: trend/state/dir", text_color=color.white)
+    table.cell(hud, 1, 10, str.tostring(pp_trend_dir) + "/" + str.tostring(pp_state) + "/" + str.tostring(pp_confirm_dir), text_color=color.silver)

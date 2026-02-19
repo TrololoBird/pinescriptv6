@@ -246,3 +246,29 @@
 - All `request.security` use `gaps_off` + `lookahead_off`.
 - Security-call budget remains `<= 6` per bar.
 - Zone/object pruning keeps `max_zones_per_tf` and object budgets stable.
+
+## 2026-02-19 02:00:00Z — v12 top-down workflow manual checklist (AUTO LTF + LTF gate)
+
+- Pre-flight local gates expected PASS:
+  - `python tools/contract_guard.py --mode release --check`
+  - `python tools/lint_guard.py`
+  - `make check-release`
+  - `make tv-export`
+
+### Manual TradingView checks
+- TF stack visibility:
+  - Verify HUD shows `TF: HTF1/HTF2/LTF` and active label includes same stack.
+- AUTO LTF behavior (`mode_tf=AUTO`):
+  - On 15m chart, resolved LTF should be 5m.
+  - On 4h chart, resolved LTF should be 1h (or configured chart-map bucket).
+  - Switch `auto_ltf_mode=AUTO_BY_HTF2` and confirm LTF equals HTF2.
+- LTF gate behavior:
+  - With `use_ltf_entry_gate=true`, confirm `CONFIRM` can show `WAIT_LTF` until price reaches LTF entry zone.
+  - Confirm `ENTRY` appears only after LTF gate is satisfied and breakout trigger occurs.
+- LTF edge observability:
+  - Verify `🎯 LTF ZONE` event on edge enter into LTF entry zone.
+  - Verify new alerts fire once on edge:
+    - `price_in_ltf_buy_zone`
+    - `price_in_ltf_sell_zone`
+- Visual rank clarity:
+  - Verify HTF1 zones are visually stronger than HTF2 and both are distinct from fallback/other TF zones.

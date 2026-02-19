@@ -186,3 +186,21 @@
   - candidate-entry capture on valid/touches condition,
   - confirmed exit requires `_exit_confirm` consecutive closes outside the flat range.
 - Contract lock refreshed (`python tools/contract_guard.py --init`) to record intentional alert text updates.
+
+## 2026-02-19 — v12 top-down workflow hardening (AUTO LTF + LTF gate)
+
+- Added `auto_ltf_mode` in TF Hierarchy with three modes:
+  - `AUTO_BY_CHART` (chart-relative lower TF mapping),
+  - `AUTO_BY_HTF2` (LTF equals resolved HTF2),
+  - `CHART` (LTF equals chart TF).
+- Integrated LTF entry-zone gating into stage/entry logic:
+  - new stage inputs `use_ltf_entry_gate`, `ltf_gate_mode`, `ltf_near_atr`;
+  - `CONFIRM` now reports `WAIT_LTF` when all filters pass but LTF gate is not satisfied;
+  - `ENTRY` transition is now allowed only when LTF gate passes.
+- Added LTF entry edge event and alerts:
+  - icon/event: `🎯 LTF ZONE` on first entry into LTF zone;
+  - alerts: `price_in_ltf_buy_zone`, `price_in_ltf_sell_zone`.
+- HUD and active label now expose resolved TF stack (`HTF1/HTF2/LTF`) to make top-down context explicit on any chart TF.
+- HTF rendering rank tuned to 3 levels:
+  - HTF1 strongest, HTF2 medium, others weakest (`fill_alpha`/width differentiation).
+- Refreshed `contract.lock.json` for intentional interface/alert additions.
