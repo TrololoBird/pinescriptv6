@@ -223,3 +223,26 @@
   - `last_break_*` state clears after `trap_max_bars` expiry (no sticky stale break diagnostics).
 - Anti-spam setup gate:
   - RR history no longer forms dense barcode-like vertical stripes around one level on 5m/15m.
+
+## 2026-02-19 01:10:00Z — v12 TV validation checklist (demo/first-trades readiness)
+- Scope: `prizrak_trade_setup_detector_v12_0_0.pine` MTF zone anchoring/stage-machine hardening.
+- Pre-TV local gates expected PASS:
+  - `make check-release`
+  - `make check-dev`
+  - `make lint`
+  - `make tv-export`
+
+### TradingView matrix
+- BTCUSDT 15m / 1h / 4h:
+  - HTF supply/demand boxes start from pivot bar timestamp.
+  - Active zone is deterministic and visually highlighted.
+  - FAR/NEAR/IN_ZONE/CONFIRM/ENTRY/BLOCKED stage transitions are readable in HUD.
+  - Alerts are edge-triggered on stage changes (no repeated spam per bar).
+- TIAUSDT 15m:
+  - Zone padding never collapses to zero (`pad >= syminfo.mintick`).
+  - Low-price symbols still render visible HTF/LTF zones.
+
+### MTF safety checks
+- All `request.security` use `gaps_off` + `lookahead_off`.
+- Security-call budget remains `<= 6` per bar.
+- Zone/object pruning keeps `max_zones_per_tf` and object budgets stable.
