@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
-PINE_FILE = Path("prizrak_trade_setup_detector_v11_7_0.pine")
+PINE_FILE = Path("prizrak_trade_setup_detector_v12_0_0.pine")
 LOCK_FILE = Path("contract.lock.json")
 INPUT_RE = re.compile(r"^\s*[A-Za-z_]\w*\s*=\s*input\.\w+\s*\(")
 INDICATOR_RE = re.compile(r"^\s*indicator\s*\(")

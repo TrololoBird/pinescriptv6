@@ -273,3 +273,18 @@ When `debug_mode=true` and `show_debug_table=true`, debug table reports module-l
 - PP: state text/code + pending dir + confirm count.
 - HTF: trend dir + previous/latest pivot pairs.
 - RR: gate/quality + requested/effective history keep and budget caps.
+
+## 9) v12.0.0 Product Flow: Zones → Prepare → Entry
+
+`prizrak_trade_setup_detector_v12_0_0.pine` introduces a product-style UX with explicit stage transitions.
+
+- MTF hierarchy is automatic by chart timeframe (with manual override):
+  - chart <= 15m: HTF1=4H, HTF2=1H, LTF=chart
+  - chart 30m/1H: HTF1=1D, HTF2=4H, LTF=chart
+  - chart >= 4H: HTF1=1W, HTF2=1D, LTF=chart
+- HTF zones use pivot high/low + ATR padding and are persisted as right-extended boxes until invalidated.
+- Active zone selection is nearest-zone with bias priority (BUY bias → demand priority, SELL bias → supply priority).
+- Stage machine: `FAR -> NEAR -> IN_ZONE -> CONFIRM -> ENTRY`, with `BLOCKED` reason shown in HUD.
+- LTF entry zone is contextual (POC-like VWMA zone or accumulation midpoint zone) and is rendered only when price is near active HTF context.
+- HUD (top-right): `Bias`, `Active zone`, `Stage`, `Next action`, `Block reason`.
+- Alerts include zone creation, near/in-zone events, entry buy/sell, and blocked entry.

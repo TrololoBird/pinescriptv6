@@ -103,3 +103,23 @@
   - buy fill -> green-based
   - sell fill -> red-based
   - PP/CHOCH marker -> purple
+
+## 2026-02-19 — v12.0.0 product rewrite (new canonical)
+
+- Added new canonical Pine file `prizrak_trade_setup_detector_v12_0_0.pine` as major-version rewrite (v11 kept as archive).
+- Implemented product flow `zones -> prepare -> entry` with explicit stage machine:
+  - `FAR`, `NEAR`, `IN_ZONE`, `CONFIRM`, `ENTRY`, plus HUD-level `BLOCKED` reason.
+- Implemented automatic MTF hierarchy selection with manual override:
+  - <=15m: 4H/1H/chart
+  - 30m/1H: 1D/4H/chart
+  - >=4H: 1W/1D/chart
+- Added HTF supply/demand zone engine (pivot + ATR pad), bounded zone storage, right extension, touch/age/invalidation lifecycle.
+- Added contextual LTF entry zone modes (`POC` and `ACCUM`) rendered as active right-extended boxes.
+- Added top-right HUD (`Bias`, `Active zone`, `Stage`, `Next action`, `Block`).
+- Added new alerts:
+  - `zone_created_buy`, `zone_created_sell`
+  - `price_near_buy_zone`, `price_near_sell_zone`
+  - `price_in_buy_zone`, `price_in_sell_zone`
+  - `entry_buy`, `entry_sell`, `entry_blocked`
+- Updated automation/scripts to target v12 as canonical for `make tv-export` and contract checks.
+- Refreshed `contract.lock.json` for the new public interface.

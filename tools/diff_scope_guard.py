@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PINE_FILE = "prizrak_trade_setup_detector_v11_7_0.pine"
+PINE_FILE = "prizrak_trade_setup_detector_v12_0_0.pine"
 
 ALLOWED_TOKEN_RE = re.compile(
     r"(skin_|rr_c|f_opaque|f_with_alpha|f_contrast_text|"
