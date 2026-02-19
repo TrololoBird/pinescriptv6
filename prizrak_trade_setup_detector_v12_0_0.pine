@@ -363,8 +363,6 @@ f_process_htf(htf2)
 zone_invalidated_demand := false
 zone_invalidated_supply := false
 
-float atr = ta.atr(14)
-
 [htf1_close, htf1_ema] = request.security(syminfo.tickerid, htf1, [close, ta.ema(close, 50)], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 [pp_trend_dir, pp_state, pp_block_all, pp_confirm_dir] = request.security(syminfo.tickerid, htf1, f_pp_state(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 int ema_bias = htf1_close > htf1_ema ? 1 : htf1_close < htf1_ema ? -1 : 0
