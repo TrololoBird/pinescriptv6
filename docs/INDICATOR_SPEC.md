@@ -5,7 +5,7 @@
 ### 1.1 Что считаем базой
 База (накопление) считается на HTF как узкий диапазон, где:
 - есть минимум `min_base_bars` баров;
-- есть минимум `min_touches` касаний верхней и нижней границы (по close, edge-trigger логика);
+- есть минимум `min_touches` касаний верхней и нижней границы (по wick overlap, edge-trigger логика);
 - диапазон базы `base_hi-base_lo` не превышает `ATR(14)*max_range_atr`.
 
 Технически используется машина состояний:
@@ -40,7 +40,7 @@ POC — price bin с максимальным объёмом внутри окн
 По умолчанию consumed-уровни удаляются; история может быть оставлена через `show_consumed_history`.
 
 ### 2.3 Touch и invalidation
-- Touch считается только edge-trigger по **входу close в зону**.
+- Touch считается только edge-trigger по **входу wick overlap в зону** (`high >= bot && low <= top`).
 - Invalidation считается строго по TF зоны, с подтверждением `invalidate_confirm_bars`.
 - Flip (если включён) делается только после invalidation + ретеста в окне `flip_retest_bars`.
 
@@ -91,3 +91,19 @@ RR считается **от entry_plan**:
 | Trap | TF зоны + chart | `trap_event_buy/sell`, `trap_ok_*` | Иконки/алерты trap |
 | RR | Chart + зона/HTF | `rr_ok_*`, `rr` | Линии entry/stop/tp, RR в HUD |
 | Alerts | Chart | stage edges + blocked edges + zone lifecycle | `alertcondition(...)` |
+
+
+## 5) Step-1 (P0) implementation constraints
+
+- `ENTRY` must be blocked on trigger-level jumps: `entry_trigger_ok_*` requires `not *_level_changed`.
+- Trap volume gate must use active zone TF only (`z_tf[buy_idx]/z_tf[sell_idx]`), not `HTF1 OR HTF2`.
+- RR target uses nearest valid opposite-zone POC on same TF and correct side; otherwise `rr_fallback_atr * ATR`.
+- P0 scope excludes unrelated origin/features; keep zone origin behavior unchanged unless separate task explicitly requests it.
+
+
+## 6) STOP VOLUME origin (v12)
+
+- STOP VOLUME детектируется на TF зоны (HTF1/HTF2) внутри HTF пакета: узкий диапазон + повышенный суммарный объём окна + подтверждённый выход (`stopvol_exit_confirm`).
+- При подтверждённом выходе создаётся зона origin=`STOPVOL` вокруг `POC ± pad` с сохранением структурных границ (`base_hi/base_lo` эквивалент stop-range).
+- Origin зоны хранится и используется в визуале/HUD (`BASE` vs `STOPVOL`) для активных BUY/SELL зон.
+- Pruning/лимиты зон остаются общими (`max_zones_per_tf` + глобальный cleanup), чтобы не выходить за object budget.
