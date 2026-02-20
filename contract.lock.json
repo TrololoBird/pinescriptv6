@@ -8,8 +8,8 @@
     ]
   },
   "inputs": {
-    "count": 58,
-    "sha256": "441874d68ff0155afbbe6debfe90360a81586637f4d65613a625523478c149a9",
+    "count": 54,
+    "sha256": "9fcb4fbc2d1337f1ae05ec6775b505dcea0ce81ee0c19fa2c38044e7c49e4495",
     "lines": [
       "mode_tf = input.string(\"AUTO\", \"TF mode\", options=[\"AUTO\", \"MANUAL\"], group=\"TF Hierarchy\")",
       "manual_htf1 = input.timeframe(\"240\", \"Manual HTF1\", group=\"TF Hierarchy\")",
@@ -59,11 +59,9 @@
       "trap_max_bars = input.int(6, \"Trap max bars (zone TF)\", minval=1, maxval=20, group=\"Trap\")",
       "trap_use_volume_gate = input.bool(false, \"Trap volume gate (zone TF volume)\", group=\"Trap\")",
       "trap_return_volume_mult = input.float(1.1, \"Trap return volume mult\", minval=0.5, step=0.1, group=\"Trap\")",
-      "stopvol_enabled = input.bool(true, \"Enable stop-volume zones\", group=\"Stop Volume\")",
-      "stopvol_len = input.int(30, \"Stop-volume window\", minval=10, maxval=400, group=\"Stop Volume\")",
+      "stopvol_enabled = input.bool(true, \"Enable stop-volume origin\", group=\"Stop Volume\")",
       "stopvol_range_atr_mult = input.float(1.25, \"Stop-volume range <= ATR *\", minval=0.2, step=0.05, group=\"Stop Volume\")",
       "stopvol_vol_mult = input.float(1.5, \"Stop-volume vol >= MA *\", minval=0.5, step=0.1, group=\"Stop Volume\")",
-      "stopvol_exit_confirm = input.int(2, \"Stop-volume exit confirm bars\", minval=1, maxval=6, group=\"Stop Volume\")",
       "show_hud = input.bool(true, \"Show HUD\", group=\"Visual\")",
       "show_labels = input.bool(true, \"Show stage icons\", group=\"Visual\")",
       "show_rr_lines = input.bool(true, \"Show entry/stop/tp lines\", group=\"Visual\")",
