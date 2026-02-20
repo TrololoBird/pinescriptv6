@@ -3,6 +3,7 @@
 ## Canonical file
 - Canonical indicator file: `prizrak_trade_setup_detector_v12_0_0.pine`.
 - Do not change it unless the task explicitly requires Pine edits.
+- Step-1/P0 fixes must stay minimal: avoid unrelated feature expansions in canonical Pine.
 
 ## Interface contract rules
 - Public interface modes:

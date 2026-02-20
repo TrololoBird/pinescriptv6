@@ -91,3 +91,11 @@ RR считается **от entry_plan**:
 | Trap | TF зоны + chart | `trap_event_buy/sell`, `trap_ok_*` | Иконки/алерты trap |
 | RR | Chart + зона/HTF | `rr_ok_*`, `rr` | Линии entry/stop/tp, RR в HUD |
 | Alerts | Chart | stage edges + blocked edges + zone lifecycle | `alertcondition(...)` |
+
+
+## 5) Step-1 (P0) implementation constraints
+
+- `ENTRY` must be blocked on trigger-level jumps: `entry_trigger_ok_*` requires `not *_level_changed`.
+- Trap volume gate must use active zone TF only (`z_tf[buy_idx]/z_tf[sell_idx]`), not `HTF1 OR HTF2`.
+- RR target uses nearest valid opposite-zone POC on same TF and correct side; otherwise `rr_fallback_atr * ATR`.
+- P0 scope excludes unrelated origin/features; keep zone origin behavior unchanged unless separate task explicitly requests it.
