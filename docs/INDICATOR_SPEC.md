@@ -40,7 +40,8 @@ POC — price bin с максимальным объёмом внутри окн
 По умолчанию consumed-уровни удаляются; история может быть оставлена через `show_consumed_history`.
 
 ### 2.3 Touch и invalidation
-- Touch считается только edge-trigger по **входу wick overlap в зону** (`high >= bot && low <= top`).
+- Touch считается только edge-trigger по **входу close в зону** (`close >= bot && close <= top`).
+- Consumed-реакция оценивается только после первого touch и по окну реакции после touch-бара (без instant-consume на том же баре).
 - Invalidation считается строго по TF зоны, с подтверждением `invalidate_confirm_bars`.
 - Flip (если включён) делается только после invalidation + ретеста в окне `flip_retest_bars`.
 

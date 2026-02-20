@@ -56,6 +56,8 @@ trap_use_volume_gate = input.bool(false, "Trap volume gate (zone TF volume)", gr
 trap_return_volume_mult = input.float(1.1, "Trap return volume mult", minval=0.5, step=0.1, group="Trap")
 
 stopvol_enabled = input.bool(true, "Enable stop-volume origin", group="Stop Volume")
+stopvol_len = input.int(6, "Stop-volume compression length", minval=3, maxval=60, group="Stop Volume")
+stopvol_exit_confirm = input.int(2, "Stop-volume breakout confirm bars", minval=1, maxval=6, group="Stop Volume")
 stopvol_range_atr_mult = input.float(1.25, "Stop-volume range <= ATR *", minval=0.2, step=0.05, group="Stop Volume")
 stopvol_vol_mult = input.float(1.5, "Stop-volume vol >= MA *", minval=0.5, step=0.1, group="Stop Volume")
 
@@ -361,6 +363,9 @@ var float[] z_base_hi = array.new_float()
 var float[] z_base_lo = array.new_float()
 var int[] z_break_time = array.new_int()
 var string[] z_origin = array.new_string()
+var int[] z_touch_bar = array.new_int()
+var float[] z_react_hi = array.new_float()
+var float[] z_react_lo = array.new_float()
 var box[] z_box = array.new_box()
 var label[] z_label = array.new_label()
 var int zid_seq = 0
@@ -409,6 +414,9 @@ f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi,
     array.push(z_base_lo, _blo)
     array.push(z_break_time, na)
     array.push(z_origin, _origin)
+    array.push(z_touch_bar, na)
+    array.push(z_react_hi, na)
+    array.push(z_react_lo, na)
     array.push(z_box, b)
     array.push(z_label, lb)
 
@@ -436,6 +444,9 @@ f_remove_zone(int i) =>
     array.remove(z_base_lo, i)
     array.remove(z_break_time, i)
     array.remove(z_origin, i)
+    array.remove(z_touch_bar, i)
+    array.remove(z_react_hi, i)
+    array.remove(z_react_lo, i)
     array.remove(z_box, i)
     array.remove(z_label, i)
 
@@ -514,16 +525,29 @@ for i = array.size(z_id) - 1 to 0
     float hlow = tfz == htf1 ? htf1_low : htf2_low
     float hvol = tfz == htf1 ? htf1_vol : htf2_vol
 
-    bool inside = high >= bot and low <= top
+    bool inside = close >= bot and close <= top
     bool was_inside = array.get(z_inside_prev, i)
     if inside and not was_inside and st <= Z_TOUCHED
         array.set(z_touch, i, array.get(z_touch, i) + 1)
         array.set(z_status, i, Z_TOUCHED)
+        array.set(z_touch_bar, i, bar_index)
+        array.set(z_react_hi, i, high)
+        array.set(z_react_lo, i, low)
     array.set(z_inside_prev, i, inside)
 
+    if array.get(z_status, i) <= Z_TOUCHED and array.get(z_touch, i) >= 1
+        float rh = array.get(z_react_hi, i)
+        float rl = array.get(z_react_lo, i)
+        array.set(z_react_hi, i, na(rh) ? high : math.max(rh, high))
+        array.set(z_react_lo, i, na(rl) ? low : math.min(rl, low))
+
     bool consumed_now = false
-    if array.get(z_touch, i) >= 1 and st <= Z_TOUCHED
-        consumed_now := typ == 1 ? (high - top) >= atrz * consume_reaction_atr_mult : (bot - low) >= atrz * consume_reaction_atr_mult
+    int first_touch_bar = array.get(z_touch_bar, i)
+    bool touch_window_live = not na(first_touch_bar) and bar_index > first_touch_bar
+    if array.get(z_touch, i) >= 1 and st <= Z_TOUCHED and touch_window_live
+        float react_hi = array.get(z_react_hi, i)
+        float react_lo = array.get(z_react_lo, i)
+        consumed_now := typ == 1 ? (react_hi - top) >= atrz * consume_reaction_atr_mult : (bot - react_lo) >= atrz * consume_reaction_atr_mult
     if consumed_now
         array.set(z_status, i, Z_CONSUMED)
         zone_consumed := true

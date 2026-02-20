@@ -384,3 +384,16 @@ Verification run:
 - Docs/ops alignment:
   - `docs/INDICATOR_SPEC.md` corrected to wick-overlap touch semantics,
   - root `AGENTS.md` canonical indicator aligned to v12 file to avoid fixing wrong target.
+
+## 2026-02-20 — v12.2.0 P0 correctness pass (close-touch + post-touch consume window + stop-volume input lock)
+
+- Corrected zone touch semantics for lifecycle from wick-overlap to close-in-zone edge trigger:
+  - touch increments only on `close` entering `[bot, top]` with edge guard (`inside && !was_inside`).
+- Corrected `CONSUMED` timing to avoid same-bar consume on first touch:
+  - first touch bar is stored,
+  - reaction window high/low is tracked after touch,
+  - consume check starts only from bars after first touch.
+- Added explicit stop-volume configuration inputs used by runtime logic:
+  - `stopvol_len`,
+  - `stopvol_exit_confirm`.
+- Interface contract intentionally changed (inputs extended); contract lock was refreshed with `python tools/contract_guard.py --init`.
