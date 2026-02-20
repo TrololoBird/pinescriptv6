@@ -1,5 +1,10 @@
 # Course Logic Spec (formal, implementation-facing)
 
+## Status note (scope)
+- This document is retained as a **legacy v11-oriented logic reference**.
+- The active production implementation target is `prizrak_trade_setup_detector_v12_0_0.pine`.
+- For v12 behavior/source-of-truth, prioritize `docs/INDICATOR_SPEC.md` + canonical Pine file.
+
 ## Purpose
 This specification formalizes the course terminology into deterministic Pine v6 rules for the repository indicator. The document is technical and validation-oriented: it defines states, boolean conditions, object lifecycle, and edge handling. It does not provide usage recommendations.
 
@@ -309,3 +314,17 @@ When `debug_mode=true` and `show_debug_table=true`, debug table reports module-l
   - PP strict state machine for confirm+bias,
   - RR stop/TP model with bounded visual history.
 - UX contract of v12 preserved: stage pipeline, right-extended boxes, HUD, icons, lifecycle alerts.
+
+
+## Video → concept mapping
+
+Template for reproducible extraction from source videos/transcripts.
+
+| Video ID / file | Timestamp (start-end) | Quote / transcript fragment | Concept | Target module/file | Action item | Status |
+|---|---|---|---|---|---|---|
+| _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _open_ |
+
+Notes:
+- Keep rows append-only.
+- Reference local artifacts in `docs/sources/videos/transcripts/`.
+- Link concept decisions to `docs/CHANGELOG_DEV.md` when implemented.
