@@ -53,11 +53,9 @@ trap_max_bars = input.int(6, "Trap max bars (zone TF)", minval=1, maxval=20, gro
 trap_use_volume_gate = input.bool(false, "Trap volume gate (zone TF volume)", group="Trap")
 trap_return_volume_mult = input.float(1.1, "Trap return volume mult", minval=0.5, step=0.1, group="Trap")
 
-stopvol_enabled = input.bool(true, "Enable stop-volume zones", group="Stop Volume")
-stopvol_len = input.int(30, "Stop-volume window", minval=10, maxval=400, group="Stop Volume")
+stopvol_enabled = input.bool(true, "Enable stop-volume origin", group="Stop Volume")
 stopvol_range_atr_mult = input.float(1.25, "Stop-volume range <= ATR *", minval=0.2, step=0.05, group="Stop Volume")
 stopvol_vol_mult = input.float(1.5, "Stop-volume vol >= MA *", minval=0.5, step=0.1, group="Stop Volume")
-stopvol_exit_confirm = input.int(2, "Stop-volume exit confirm bars", minval=1, maxval=6, group="Stop Volume")
 
 show_hud = input.bool(true, "Show HUD", group="Visual")
 show_labels = input.bool(true, "Show stage icons", group="Visual")
@@ -361,7 +359,6 @@ var float[] z_base_hi = array.new_float()
 var float[] z_base_lo = array.new_float()
 var int[] z_break_time = array.new_int()
 var string[] z_origin = array.new_string()
-
 var box[] z_box = array.new_box()
 var label[] z_label = array.new_label()
 var int zid_seq = 0
@@ -410,7 +407,6 @@ f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi,
     array.push(z_base_lo, _blo)
     array.push(z_break_time, na)
     array.push(z_origin, _origin)
-
     array.push(z_box, b)
     array.push(z_label, lb)
 
@@ -438,7 +434,6 @@ f_remove_zone(int i) =>
     array.remove(z_base_lo, i)
     array.remove(z_break_time, i)
     array.remove(z_origin, i)
-
     array.remove(z_box, i)
     array.remove(z_label, i)
 
@@ -488,31 +483,20 @@ bool zone_invalidated = false
 bool zone_consumed = false
 bool zone_flipped = false
 
+bool htf1_stopvol = stopvol_enabled and not na(htf1_bh) and not na(htf1_bl) and not na(htf1_atr) and not na(htf1_vol_ma) and (htf1_bh - htf1_bl) <= htf1_atr * stopvol_range_atr_mult and htf1_vol >= htf1_vol_ma * stopvol_vol_mult
+bool htf2_stopvol = stopvol_enabled and not na(htf2_bh) and not na(htf2_bl) and not na(htf2_atr) and not na(htf2_vol_ma) and (htf2_bh - htf2_bl) <= htf2_atr * stopvol_range_atr_mult and htf2_vol >= htf2_vol_ma * stopvol_vol_mult
 
 if htf1_edge_up > 0 and htf1_edge_up[1] <= 0 and not na(htf1_poc)
-    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, "BASE")
+    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, htf1_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 if htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0 and not na(htf1_poc)
-    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, "BASE")
+    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, htf1_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 if htf2_edge_up > 0 and htf2_edge_up[1] <= 0 and not na(htf2_poc)
-    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, "BASE")
+    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, htf2_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 if htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0 and not na(htf2_poc)
-    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, "BASE")
-    zone_created := true
-
-if htf1_stop_up > 0 and htf1_stop_up[1] <= 0 and not na(htf1_stop_poc)
-    f_create_zone(1, htf1, htf1_stop_poc, htf1_atr, int(htf1_timef), htf1_stop_bh, htf1_stop_bl, "STOPVOL")
-    zone_created := true
-if htf1_stop_dn > 0 and htf1_stop_dn[1] <= 0 and not na(htf1_stop_poc)
-    f_create_zone(-1, htf1, htf1_stop_poc, htf1_atr, int(htf1_timef), htf1_stop_bh, htf1_stop_bl, "STOPVOL")
-    zone_created := true
-if htf2_stop_up > 0 and htf2_stop_up[1] <= 0 and not na(htf2_stop_poc)
-    f_create_zone(1, htf2, htf2_stop_poc, htf2_atr, int(htf2_timef), htf2_stop_bh, htf2_stop_bl, "STOPVOL")
-    zone_created := true
-if htf2_stop_dn > 0 and htf2_stop_dn[1] <= 0 and not na(htf2_stop_poc)
-    f_create_zone(-1, htf2, htf2_stop_poc, htf2_atr, int(htf2_timef), htf2_stop_bh, htf2_stop_bl, "STOPVOL")
+    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, htf2_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 
 for i = array.size(z_id) - 1 to 0
