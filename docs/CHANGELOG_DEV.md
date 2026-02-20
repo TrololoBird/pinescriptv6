@@ -365,3 +365,22 @@ Verification run:
   - `wait_trig_*` is now separate when filters pass but entry trigger is still pending,
   - blocked edge icons/alerts now fire only for real in-zone filter blocks.
 - Fixed Trap volume gate TF consistency by computing `vol_ma=ta.sma(volume,20)` inside HTF `request.security` pack and gating against returned HTF MA values.
+
+## 2026-02-20 — v12.2.0 P0/P1 productization pass (stable trigger, TF-consistent trap vol, nearest TP, STOPVOL origin)
+
+- P0 Stable-cross guard hardening:
+  - wired `buy_level_changed/sell_level_changed` into `entry_trigger_ok_buy/sell` so ENTRY cannot fire on trigger-level jumps.
+- P0 Trap volume gate TF consistency:
+  - replaced HTF1/HTF2 OR gating with active-zone TF gating (`z_tf[buy_idx/sell_idx]` => matching volume + MA pair).
+- P0 RR target selection:
+  - target now picks nearest valid opposite-zone POC on same TF:
+    - BUY: nearest supply POC strictly above `buy_entry_plan`.
+    - SELL: nearest demand POC strictly below `sell_entry_plan`.
+  - fallback remains `rr_fallback_atr * ATR` when no valid candidate exists.
+- P1 STOP VOLUME integration from v11 concept (without architecture rewrite):
+  - added optional stop-volume origin classifier (`stopvol_enabled`, `stopvol_range_atr_mult`, `stopvol_vol_mult`),
+  - zones created on confirmed HTF breakouts are tagged as `BASE`/`STOPVOL` origin,
+  - STOPVOL zones are visually distinct (color/border/label origin marker).
+- Docs/ops alignment:
+  - `docs/INDICATOR_SPEC.md` corrected to wick-overlap touch semantics,
+  - root `AGENTS.md` canonical indicator aligned to v12 file to avoid fixing wrong target.

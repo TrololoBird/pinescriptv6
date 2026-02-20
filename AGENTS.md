@@ -1,7 +1,7 @@
 # Repository guardrails for Codex
 
 ## Canonical file
-- Canonical indicator file: `prizrak_trade_setup_detector_v11_7_0.pine`.
+- Canonical indicator file: `prizrak_trade_setup_detector_v12_0_0.pine`.
 - Do not change it unless the task explicitly requires Pine edits.
 
 ## Interface contract rules
