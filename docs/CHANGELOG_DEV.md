@@ -241,3 +241,21 @@
   - stage icons (`⏳`, `⚡`, `✅`, `▲/▼`, `⛔`) and dual BUY/SELL HUD rows with module status flags.
   - zone labels include side + POC + TF text (`BUY POC (4H)`, etc).
 - Contract intentionally changed (inputs/alerts renamed/expanded for the new pipeline); lock file refreshed via repo tool.
+
+## 2026-02-19 — v12.1.0 core alignment to PDF base/POC methodology
+
+- Fixed HTF base breakout confirmation by replacing `prev_in_base` single-edge logic with explicit state machine in `f_htf_pack`: `BASE_OFF -> BASE_ON -> POST_BASE`, with one-shot edge only after confirmed exit bars and rollback from `POST_BASE` to `BASE_ON` when price returns inside base.
+- Replaced HTF `ta.vwap` pseudo-POC with per-base volume bins (`htf_poc_bins`) and base price mode (`htf_poc_price_mode`), with base window cap (`base_max_bars`) and breakout-time POC extraction from max-volume bin.
+- Reworked invalidation confirmation to HTF-discrete counting (`z_inv_cnt`, `z_last_tf_time`) so `invalidate_confirm_bars` is counted per new HTF candle, not LTF bar accumulation.
+- Fixed dual-side stage/edge pipeline:
+  - separate BUY and SELL near/in-zone edges,
+  - separate `stage_buy`/`stage_sell` transitions,
+  - side-bound alerts (`near_buy`, `near_sell`, `in_zone_buy`, `in_zone_sell`, etc.) now use side-specific edges.
+- PP naming cleanup: module renamed to `EMA_BIAS` (`use_ema_bias_confirm`) across inputs/HUD logic to avoid claiming PDF-PP implementation.
+- LTF POC entry zone changed from VWAP to bounded volume-profile bins (`ltf_poc_len`, `ltf_poc_bins`, `ltf_poc_pad_mult`) and gate now reflects that computed zone.
+- RR logic aligned to base structure:
+  - per-zone base extremes persisted (`z_base_hi`, `z_base_lo`),
+  - default stop uses base boundary ± ATR pad,
+  - reward targets nearest opposite active zone on same TF, fallback to ATR-based target.
+- Added bounded icon history with `icon_keep` and label pruning to avoid object-limit pressure.
+- Contract intentionally updated for new/renamed inputs; lock refreshed.
