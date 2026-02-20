@@ -292,3 +292,35 @@
 - Visual/runtime:
   - zone extension made configurable via `zone_extend_bars` (replacing fixed 400),
   - stage icons preserved with `icon_keep` pruning budget.
+
+## 2026-02-20 — v12.2.0 methodology rewrite (zone → prep → confirm → entry)
+
+- Added formal short spec `docs/INDICATOR_SPEC.md` with strict module semantics from course flow: base/POC, lifecycle, PP, trap, stage machine, RR.
+- Rewrote `prizrak_trade_setup_detector_v12_0_0.pine` core architecture:
+  - HTF base detector migrated to explicit states `SEEK_BASE -> BUILD_BASE -> BASE_VALID -> BREAKOUT_UP/DN`.
+  - Base validity now requires `min_base_bars`, dual-side touches (`4+` style), and ATR-capped range.
+  - Breakout edge only after `exit_confirm_bars` HTF closes outside base.
+  - POC computed from volume bins with reusable arrays.
+- Zone lifecycle aligned with one-touch consume model:
+  - close-based edge touch counting,
+  - consume-on-first-quality-reaction,
+  - invalidation confirmed on zone TF bars,
+  - optional flip only on break+retest window.
+- Stage machine rewritten to one-pass priority cascade:
+  - `FAR -> NEAR -> IN_ZONE -> LTF_READY -> CONFIRM_READY -> ENTRY`.
+  - `BLOCKED` separated into independent flags with reason codes `RR/PP/TRAP/OSC/LTF/TRIG`.
+- Entry trigger changed to stable-cross logic for MTF (`close > lvl_now && close[1] <= lvl_prev`, mirrored for sell) with level-change guard.
+- PP module restored as explicit confirm component:
+  - inputs for enable/type/confirm closes/retest window/timeframe,
+  - true/early modes and HUD state `PP: OK/WAI/BAD`.
+- Trap/RR/UX updates:
+  - trap volume gate reads zone-TF volume from security packs,
+  - RR is based on `entry_plan` mode (`POC` or `ZONE_EDGE`) with structure stop and opposite-zone target fallback,
+  - active BUY/SELL labels and HUD legend for icons (`⏳⚡✅▲▼⛔`).
+- Contract lock intentionally refreshed for updated indicator/input/alert interface.
+
+Verification run:
+- `make check-release`
+- `python tools/lint_guard.py`
+- `make tv-export`
+- `make check-dev`
