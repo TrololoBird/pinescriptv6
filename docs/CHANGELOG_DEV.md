@@ -324,3 +324,32 @@ Verification run:
 - `python tools/lint_guard.py`
 - `make tv-export`
 - `make check-dev`
+
+## 2026-02-20 — v12.2.0 productization pass (core correctness + UX stability)
+
+Что было не так:
+- LTF trigger был математически «жёстким»: уровень триггера строился как `ta.highest/lowest(..., N)` на текущем баре, после чего вход проверялся как `close > highest` / `close < lowest`. Для BUY это часто делало ENTRY недостижимым, а для SELL — нестабильным на смене уровня.
+- Выбор активной зоны происходил по минимальной дистанции без приоритета TF и без sticky-гистерезиса, поэтому active BUY/SELL могла дёргаться между HTF1/HTF2 при малых колебаниях цены. Touch-логика считала только `close` внутри зоны и пропускала wick-касания.
+
+Что исправлено:
+- LTF trigger исправлен на прошлые бары: `trig_up = highest(high, N)[1]`, `trig_dn = lowest(low, N)[1]`; добавлены `na`-guards и epsilon-сравнения через `abs(...) > eps` вместо `!=` для уровней.
+- Trigger привязан к plan mode:
+  - `ZONE_EDGE`: BUY по пробою `buy_top`, SELL по пробою `sell_bot`.
+  - `POC`: BUY по `max(ltf_trig_up, buy_entry_plan)`, SELL по `min(ltf_trig_dn, sell_entry_plan)`.
+- Touch/inside переведены на wick overlap (`high >= bot && low <= top`) с edge-trigger по `z_inside_prev`.
+- Flip-зоны теперь создаются с HTF timestamp (`htime`) вместо LTF `time`.
+- Добавлен sticky active-zone selector:
+  - отдельные `active_buy_zone_id` / `active_sell_zone_id`,
+  - score = normalized distance + TF penalty (HTF1 приоритетнее HTF2),
+  - переключение только при «существенно лучшем» кандидате (`switch margin`) и после hold window.
+- Добавлен per TF/per side pruning (`max_zones_per_tf`), чтобы одна сторона/TF не вытесняла остальные.
+- Визуал активной зоны усилен (border/bg/label ACTIVE), HUD stage стал человекочитаемым (`⏳/⚡/✅/▲▼`), BLOCKED reason показывается только при block, иначе `WAIT TRIG` / `WAIT FILTERS`, плюс статусы модулей в HUD.
+
+Как проверить в TradingView:
+- Инструменты: BTCUSDT и один альт (например ETHUSDT).
+- Таймфреймы: 15m, 1h, 4h.
+- Проверка сценариев:
+  - На 15m/1h видны HTF1/HTF2 зоны; active-зона не прыгает хаотично между HTF1/HTF2 при небольшом шуме.
+  - При подходе к зоне появляется `⏳`, при overlap в зону — `⚡`, после прохождения фильтров — `✅`, затем на реальном trigger событии — `▲/▼ ENTRY`.
+  - Wick-touch увеличивает touches только на входе в overlap (без спама каждый бар внутри).
+  - После break+retest flip-зона имеет корректную HTF привязку по времени (возраст/extend/окна не «ломаются»).

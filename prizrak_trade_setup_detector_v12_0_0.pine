@@ -215,7 +215,10 @@ f_ltf_pack(int _len, int _bins, int _break_len) =>
             max_idx := bi
     float bw = den / _bins
     float poc = pl + bw * max_idx + bw * 0.5
-    [atr, poc, ta.highest(high, _break_len), ta.lowest(low, _break_len), close, time * 1.0]
+    int break_len_safe = math.max(_break_len, 1)
+    float trig_up_prev = ta.highest(high, break_len_safe)[1]
+    float trig_dn_prev = ta.lowest(low, break_len_safe)[1]
+    [atr, poc, trig_up_prev, trig_dn_prev, close, time * 1.0]
 
 [ltf_atr, ltf_poc, ltf_trig_up, ltf_trig_dn, ltf_close, ltf_timef] = request.security(syminfo.tickerid, ltf, f_ltf_pack(ltf_poc_len, ltf_poc_bins, entry_break_len), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 
@@ -282,6 +285,14 @@ var box[] z_box = array.new_box()
 var label[] z_label = array.new_label()
 var int zid_seq = 0
 var label[] event_icons = array.new_label()
+var int active_buy_zone_id = na
+var int active_sell_zone_id = na
+var int active_buy_held_bars = 0
+var int active_sell_held_bars = 0
+
+float SWITCH_MARGIN_SCORE = 0.2
+int SWITCH_HOLD_BARS = 3
+float EPS = syminfo.mintick * 0.25
 
 f_push_icon(string _txt, color _bg, bool _up) =>
     label ic = label.new(time, close, _txt, xloc=xloc.bar_time, style=_up ? label.style_label_up : label.style_label_down, color=_bg, textcolor=color.white, size=size.tiny)
@@ -345,6 +356,47 @@ f_remove_zone(int i) =>
     array.remove(z_box, i)
     array.remove(z_label, i)
 
+f_find_zone_index(int _zone_id) =>
+    int idx = -1
+    for j = 0 to array.size(z_id) - 1
+        if array.get(z_id, j) == _zone_id
+            idx := j
+            break
+    idx
+
+f_is_zone_selectable(int i) =>
+    array.get(z_status, i) <= Z_TOUCHED
+
+f_zone_score(int i) =>
+    float top = array.get(z_top, i)
+    float bot = array.get(z_bot, i)
+    float atrz = array.get(z_atr, i)
+    float dist = close > top ? close - top : close < bot ? bot - close : 0.0
+    float dist_norm = dist / math.max(atrz, syminfo.mintick)
+    float tf_penalty = array.get(z_tf, i) == htf1 ? 0.0 : 0.35
+    dist_norm + tf_penalty
+
+f_enforce_tf_side_limit(int _typ, string _tf) =>
+    int keep = max_zones_per_tf
+    int count = 0
+    for j = 0 to array.size(z_id) - 1
+        if array.get(z_type, j) == _typ and array.get(z_tf, j) == _tf
+            count += 1
+    while count > keep
+        int oldest_idx = -1
+        int oldest_time = int(10e15)
+        for j = 0 to array.size(z_id) - 1
+            if array.get(z_type, j) == _typ and array.get(z_tf, j) == _tf
+                int zt = array.get(z_time, j)
+                if zt < oldest_time
+                    oldest_time := zt
+                    oldest_idx := j
+        if oldest_idx >= 0
+            f_remove_zone(oldest_idx)
+            count -= 1
+        else
+            break
+
 bool zone_created = false
 bool zone_invalidated = false
 bool zone_consumed = false
@@ -376,7 +428,7 @@ for i = array.size(z_id) - 1 to 0
     float hlow = tfz == htf1 ? htf1_low : htf2_low
     float hvol = tfz == htf1 ? htf1_vol : htf2_vol
 
-    bool inside = close <= top and close >= bot
+    bool inside = high >= bot and low <= top
     bool was_inside = array.get(z_inside_prev, i)
     if inside and not was_inside and st <= Z_TOUCHED
         array.set(z_touch, i, array.get(z_touch, i) + 1)
@@ -408,7 +460,7 @@ for i = array.size(z_id) - 1 to 0
         bool in_win = not na(bt) and int((htime - bt) / math.max(f_tf_ms(tfz), 1)) <= flip_retest_bars
         bool retest_ok = typ == 1 ? hhigh >= bot and hclose <= bot : hlow <= top and hclose >= top
         if in_win and retest_ok
-            f_create_zone(-typ, tfz, array.get(z_poc, i), atrz, time, array.get(z_base_hi, i), array.get(z_base_lo, i))
+            f_create_zone(-typ, tfz, array.get(z_poc, i), atrz, htime, array.get(z_base_hi, i), array.get(z_base_lo, i))
             zone_flipped := true
             array.set(z_break_time, i, na)
 
@@ -431,22 +483,87 @@ for i = array.size(z_id) - 1 to 0
 while array.size(z_id) > max_zones_per_tf * 4
     f_remove_zone(0)
 
-int buy_idx = -1
-int sell_idx = -1
-float buy_dist = 10e10
-float sell_dist = 10e10
+f_enforce_tf_side_limit(1, htf1)
+f_enforce_tf_side_limit(1, htf2)
+f_enforce_tf_side_limit(-1, htf1)
+f_enforce_tf_side_limit(-1, htf2)
+
+int best_buy_idx = -1
+int best_sell_idx = -1
+float best_buy_score = 10e10
+float best_sell_score = 10e10
 for i = 0 to array.size(z_id) - 1
-    if array.get(z_status, i) <= Z_TOUCHED
-        float top = array.get(z_top, i)
-        float bot = array.get(z_bot, i)
-        float d = close > top ? close - top : close < bot ? bot - close : 0.0
+    if f_is_zone_selectable(i)
         int typ = array.get(z_type, i)
-        if typ == 1 and d < buy_dist
-            buy_dist := d
-            buy_idx := i
-        if typ == -1 and d < sell_dist
-            sell_dist := d
-            sell_idx := i
+        float score = f_zone_score(i)
+        if typ == 1 and score < best_buy_score
+            best_buy_score := score
+            best_buy_idx := i
+        if typ == -1 and score < best_sell_score
+            best_sell_score := score
+            best_sell_idx := i
+
+int buy_idx = f_find_zone_index(active_buy_zone_id)
+int sell_idx = f_find_zone_index(active_sell_zone_id)
+
+if buy_idx < 0 or not f_is_zone_selectable(buy_idx)
+    active_buy_zone_id := na
+    active_buy_held_bars := 0
+    buy_idx := -1
+if sell_idx < 0 or not f_is_zone_selectable(sell_idx)
+    active_sell_zone_id := na
+    active_sell_held_bars := 0
+    sell_idx := -1
+
+if best_buy_idx >= 0
+    if na(active_buy_zone_id)
+        active_buy_zone_id := array.get(z_id, best_buy_idx)
+        active_buy_held_bars := 0
+    else
+        int current_buy_idx = f_find_zone_index(active_buy_zone_id)
+        if current_buy_idx >= 0
+            float current_buy_score = f_zone_score(current_buy_idx)
+            float candidate_buy_score = f_zone_score(best_buy_idx)
+            bool same_zone_buy = array.get(z_id, current_buy_idx) == array.get(z_id, best_buy_idx)
+            bool better_buy = candidate_buy_score + SWITCH_MARGIN_SCORE < current_buy_score
+            if same_zone_buy
+                active_buy_held_bars += 1
+            else if better_buy and active_buy_held_bars >= SWITCH_HOLD_BARS
+                active_buy_zone_id := array.get(z_id, best_buy_idx)
+                active_buy_held_bars := 0
+            else
+                active_buy_held_bars += 1
+        else
+            active_buy_zone_id := array.get(z_id, best_buy_idx)
+            active_buy_held_bars := 0
+
+if best_sell_idx >= 0
+    if na(active_sell_zone_id)
+        active_sell_zone_id := array.get(z_id, best_sell_idx)
+        active_sell_held_bars := 0
+    else
+        int current_sell_idx = f_find_zone_index(active_sell_zone_id)
+        if current_sell_idx >= 0
+            float current_sell_score = f_zone_score(current_sell_idx)
+            float candidate_sell_score = f_zone_score(best_sell_idx)
+            bool same_zone_sell = array.get(z_id, current_sell_idx) == array.get(z_id, best_sell_idx)
+            bool better_sell = candidate_sell_score + SWITCH_MARGIN_SCORE < current_sell_score
+            if same_zone_sell
+                active_sell_held_bars += 1
+            else if better_sell and active_sell_held_bars >= SWITCH_HOLD_BARS
+                active_sell_zone_id := array.get(z_id, best_sell_idx)
+                active_sell_held_bars := 0
+            else
+                active_sell_held_bars += 1
+        else
+            active_sell_zone_id := array.get(z_id, best_sell_idx)
+            active_sell_held_bars := 0
+
+buy_idx := f_find_zone_index(active_buy_zone_id)
+sell_idx := f_find_zone_index(active_sell_zone_id)
+
+float buy_dist = buy_idx >= 0 ? (close > array.get(z_top, buy_idx) ? close - array.get(z_top, buy_idx) : close < array.get(z_bot, buy_idx) ? array.get(z_bot, buy_idx) - close : 0.0) : na
+float sell_dist = sell_idx >= 0 ? (close > array.get(z_top, sell_idx) ? close - array.get(z_top, sell_idx) : close < array.get(z_bot, sell_idx) ? array.get(z_bot, sell_idx) - close : 0.0) : na
 
 bool has_buy = buy_idx >= 0
 bool has_sell = sell_idx >= 0
@@ -459,8 +576,8 @@ float sell_bot = has_sell ? array.get(z_bot, sell_idx) : na
 float sell_poc = has_sell ? array.get(z_poc, sell_idx) : na
 float sell_atr = has_sell ? array.get(z_atr, sell_idx) : na
 
-bool buy_in_zone = has_buy and close >= buy_bot and close <= buy_top
-bool sell_in_zone = has_sell and close >= sell_bot and close <= sell_top
+bool buy_in_zone = has_buy and high >= buy_bot and low <= buy_top
+bool sell_in_zone = has_sell and high >= sell_bot and low <= sell_top
 bool buy_near = has_buy and buy_dist <= near_thr_atr * buy_atr
 bool sell_near = has_sell and sell_dist <= near_thr_atr * sell_atr
 bool ltf_gate_ok_buy = has_buy and (not use_ltf_entry_gate or (ltf_gate_mode == "IN_ZONE" ? buy_in_zone : buy_near or (buy_dist <= ltf_near_atr * ltf_atr)))
@@ -512,12 +629,12 @@ float rr_sell = has_sell ? math.abs((sell_entry_plan - sell_tp) / math.max(sell_
 bool rr_ok_buy = not use_rr_gate or (has_buy and rr_buy >= rr_min)
 bool rr_ok_sell = not use_rr_gate or (has_sell and rr_sell >= rr_min)
 
-float buy_trig_level = ltf_trig_up
-float sell_trig_level = ltf_trig_dn
-bool buy_level_changed = buy_trig_level != buy_trig_level[1]
-bool sell_level_changed = sell_trig_level != sell_trig_level[1]
-bool entry_trigger_ok_buy = has_buy and not buy_level_changed and ltf_close > buy_trig_level and ltf_close[1] <= buy_trig_level[1]
-bool entry_trigger_ok_sell = has_sell and not sell_level_changed and ltf_close < sell_trig_level and ltf_close[1] >= sell_trig_level[1]
+float buy_trig_level = entry_plan_mode == "ZONE_EDGE" ? buy_top : math.max(ltf_trig_up, buy_entry_plan)
+float sell_trig_level = entry_plan_mode == "ZONE_EDGE" ? sell_bot : math.min(ltf_trig_dn, sell_entry_plan)
+bool buy_level_changed = has_buy and not na(buy_trig_level) and not na(buy_trig_level[1]) and math.abs(buy_trig_level - buy_trig_level[1]) > EPS
+bool sell_level_changed = has_sell and not na(sell_trig_level) and not na(sell_trig_level[1]) and math.abs(sell_trig_level - sell_trig_level[1]) > EPS
+bool entry_trigger_ok_buy = has_buy and not na(ltf_close) and not na(ltf_close[1]) and not na(buy_trig_level) and not na(buy_trig_level[1]) and ltf_close > buy_trig_level + EPS and ltf_close[1] <= buy_trig_level[1] + EPS
+bool entry_trigger_ok_sell = has_sell and not na(ltf_close) and not na(ltf_close[1]) and not na(sell_trig_level) and not na(sell_trig_level[1]) and ltf_close < sell_trig_level - EPS and ltf_close[1] >= sell_trig_level[1] - EPS
 
 string block_reason_buy = ""
 string block_reason_sell = ""
@@ -600,6 +717,22 @@ if show_labels and blocked_buy_edge
 if show_labels and blocked_sell_edge
     f_push_icon("⛔ SELL " + block_reason_sell, color.new(color.maroon, 0), false)
 
+for i = 0 to array.size(z_id) - 1
+    box bx = array.get(z_box, i)
+    label lb = array.get(z_label, i)
+    int typ = array.get(z_type, i)
+    string tfz = array.get(z_tf, i)
+    bool is_active = array.get(z_id, i) == active_buy_zone_id or array.get(z_id, i) == active_sell_zone_id
+    color side_col = typ == 1 ? color.lime : color.red
+    int fill_opa = tfz == htf1 ? 80 : 90
+    if not na(bx)
+        box.set_bgcolor(bx, color.new(side_col, is_active ? fill_opa - 8 : fill_opa))
+        box.set_border_color(bx, color.new(side_col, is_active ? 0 : 25))
+        box.set_border_width(bx, is_active ? 2 : 1)
+    if not na(lb)
+        label.set_text(lb, (typ == 1 ? "BUY " : "SELL ") + tfz + " T:" + str.tostring(array.get(z_touch, i)) + (is_active ? " ACTIVE" : ""))
+        label.set_color(lb, color.new(side_col, is_active ? 5 : 20))
+
 plot(show_rr_lines and has_buy ? buy_entry_plan : na, "BUY entry", color=color.new(color.lime, 0), linewidth=1, style=plot.style_linebr)
 plot(show_rr_lines and has_buy ? buy_stop : na, "BUY stop", color=color.new(color.red, 0), linewidth=1, style=plot.style_linebr)
 plot(show_rr_lines and has_buy ? buy_tp : na, "BUY tp", color=color.new(color.blue, 0), linewidth=1, style=plot.style_linebr)
@@ -651,15 +784,15 @@ if barstate.islast and show_hud
     table.cell(hud, 6, 0, "LEGEND", text_color=color.white)
     table.cell(hud, 0, 1, "BUY", text_color=color.lime)
     table.cell(hud, 1, 1, has_buy ? str.tostring(buy_poc, format.mintick) : "n/a", text_color=color.white)
-    table.cell(hud, 2, 1, stage_buy, text_color=color.white)
-    table.cell(hud, 3, 1, blocked_buy ? block_reason_buy : "-", text_color=blocked_buy ? color.orange : color.silver)
-    table.cell(hud, 4, 1, "RR:" + (rr_ok_buy ? "OK" : "BAD") + " PP:" + pp_state_buy, text_color=color.silver)
+    table.cell(hud, 2, 1, stage_buy == STAGE_NEAR ? "⏳ NEAR" : stage_buy == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_buy == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_buy == STAGE_ENTRY ? "▲ ENTRY" : stage_buy, text_color=color.white)
+    table.cell(hud, 3, 1, blocked_buy ? "⛔ " + block_reason_buy : (stage_buy == STAGE_CONFIRM_READY ? "WAIT TRIG" : "WAIT FILTERS"), text_color=blocked_buy ? color.orange : color.silver)
+    table.cell(hud, 4, 1, "RR:" + (has_buy ? str.tostring(rr_buy, format.mintick) : "n/a") + " PP:" + pp_state_buy + " T/O/L:" + (trap_ok_buy ? "OK" : "BAD") + "/" + (osc_ok_buy ? "OK" : "BAD") + "/" + (ltf_gate_ok_buy ? "OK" : "BAD"), text_color=color.silver)
     table.cell(hud, 5, 1, has_buy ? array.get(z_tf, buy_idx) : "-", text_color=color.white)
     table.cell(hud, 0, 2, "SELL", text_color=color.red)
     table.cell(hud, 1, 2, has_sell ? str.tostring(sell_poc, format.mintick) : "n/a", text_color=color.white)
-    table.cell(hud, 2, 2, stage_sell, text_color=color.white)
-    table.cell(hud, 3, 2, blocked_sell ? block_reason_sell : "-", text_color=blocked_sell ? color.orange : color.silver)
-    table.cell(hud, 4, 2, "RR:" + (rr_ok_sell ? "OK" : "BAD") + " PP:" + pp_state_sell, text_color=color.silver)
+    table.cell(hud, 2, 2, stage_sell == STAGE_NEAR ? "⏳ NEAR" : stage_sell == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_sell == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_sell == STAGE_ENTRY ? "▼ ENTRY" : stage_sell, text_color=color.white)
+    table.cell(hud, 3, 2, blocked_sell ? "⛔ " + block_reason_sell : (stage_sell == STAGE_CONFIRM_READY ? "WAIT TRIG" : "WAIT FILTERS"), text_color=blocked_sell ? color.orange : color.silver)
+    table.cell(hud, 4, 2, "RR:" + (has_sell ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD"), text_color=color.silver)
     table.cell(hud, 5, 2, has_sell ? array.get(z_tf, sell_idx) : "-", text_color=color.white)
     table.cell(hud, 0, 3, "TF", text_color=color.white)
     table.cell(hud, 1, 3, htf1 + "/" + htf2 + "/" + ltf, text_color=color.silver)
