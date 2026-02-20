@@ -34,3 +34,23 @@
 - Validation snapshot:
   - `python tools/contract_guard.py --init` executed intentionally due to interface change (new Stop Volume inputs).
   - Release contract/lint/check-release pass after lock refresh.
+
+## 2026-02-20T22:57:19Z — Baseline audit refresh (no Pine edits)
+- Audited canonical file: `prizrak_trade_setup_detector_v12_0_0.pine` (header version: `v12.2.0`).
+- Baseline command results:
+  - `python tools/contract_guard.py --mode release --check` → **FAIL** (`inputs` mismatch: lock expects 54, actual 56).
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → **FAIL** (fails on same contract mismatch).
+  - `make tv-export` → PASS.
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → `938` lines.
+  - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → `4` (within limit <= 6).
+- Current technical limits (from indicator declaration):
+  - `max_boxes_count=300`, `max_labels_count=300`.
+- Known open issues to prioritize in next iteration (from provided deep-research summary):
+  1. `buy_level_changed/sell_level_changed` are computed but not applied in `entry_trigger_ok_*` protection logic.
+  2. Trap volume gate uses OR across HTF1/HTF2 instead of evaluating volume on active zone TF.
+  3. RR TP selection should use nearest valid opposite POC (correct direction), not last matching one.
+  4. Docs drift: `docs/INDICATOR_SPEC.md` touch semantics vs code behavior (wick overlap), plus canonical-file confusion risk in agent docs.
+  5. Methodology gap: stop-volume origin handling needs parity with v11 module.
+- Deep research report reference note:
+  - No in-repo file matched `deep-research-report` by filename (`rg --files | rg -i "deep|research|report"` returned no matches); using user-provided summary as checkpoint source for now.
