@@ -5,7 +5,7 @@
 ### 1.1 Что считаем базой
 База (накопление) считается на HTF как узкий диапазон, где:
 - есть минимум `min_base_bars` баров;
-- есть минимум `min_touches` касаний верхней и нижней границы (по close, edge-trigger логика);
+- есть минимум `min_touches` касаний верхней и нижней границы (по wick overlap, edge-trigger логика);
 - диапазон базы `base_hi-base_lo` не превышает `ATR(14)*max_range_atr`.
 
 Технически используется машина состояний:
@@ -40,7 +40,7 @@ POC — price bin с максимальным объёмом внутри окн
 По умолчанию consumed-уровни удаляются; история может быть оставлена через `show_consumed_history`.
 
 ### 2.3 Touch и invalidation
-- Touch считается только edge-trigger по **входу close в зону**.
+- Touch считается только edge-trigger по **входу wick overlap в зону** (`high >= bot && low <= top`).
 - Invalidation считается строго по TF зоны, с подтверждением `invalidate_confirm_bars`.
 - Flip (если включён) делается только после invalidation + ретеста в окне `flip_retest_bars`.
 
