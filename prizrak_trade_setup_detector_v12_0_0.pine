@@ -38,6 +38,8 @@ rr_min = input.float(1.8, "Min RR", minval=0.5, step=0.1, group="Stages")
 entry_plan_mode = input.string("POC", "Entry plan mode", options=["POC", "ZONE_EDGE"], group="Stages")
 stop_pad_atr_mult = input.float(0.1, "Stop pad ATR mult", minval=0.0, step=0.05, group="Stages")
 stop_pad_pct = input.float(0.5, "Stop pad %", minval=0.0, step=0.1, group="Stages")
+stop_mode = input.string("BASE", "Stop mode", options=["BASE", "STOPVOL_NEAR"], group="Stages")
+stopvol_near_pct = input.float(0.5, "StopVol near threshold %", minval=0.1, step=0.1, group="Stages")
 rr_fallback_atr = input.float(3.0, "RR fallback target ATR", minval=0.5, step=0.5, group="Stages")
 use_ema_bias_confirm = input.bool(true, "Use EMA_BIAS", group="Stages")
 use_trap_confirm = input.bool(false, "Use TRAP", group="Stages")
@@ -708,8 +710,35 @@ bool trap_ok_sell = not use_trap_confirm or ((trap_sell_event or trap_type2_sell
 
 float buy_entry_plan = has_buy ? (entry_plan_mode == "POC" ? buy_poc : buy_top) : na
 float sell_entry_plan = has_sell ? (entry_plan_mode == "POC" ? sell_poc : sell_bot) : na
-float buy_stop = has_buy ? array.get(z_base_lo, buy_idx) - math.max(array.get(z_base_lo, buy_idx) * stop_pad_pct * 0.01, buy_atr * stop_pad_atr_mult) : na
-float sell_stop = has_sell ? array.get(z_base_hi, sell_idx) + math.max(array.get(z_base_hi, sell_idx) * stop_pad_pct * 0.01, sell_atr * stop_pad_atr_mult) : na
+float buy_base_lo = has_buy ? array.get(z_base_lo, buy_idx) : na
+float sell_base_hi = has_sell ? array.get(z_base_hi, sell_idx) : na
+float buy_pad = has_buy ? math.max(buy_base_lo * stop_pad_pct * 0.01, buy_atr * stop_pad_atr_mult) : na
+float sell_pad = has_sell ? math.max(sell_base_hi * stop_pad_pct * 0.01, sell_atr * stop_pad_atr_mult) : na
+float buy_stop_anchor = buy_base_lo
+float sell_stop_anchor = sell_base_hi
+float buy_stopvol_dist = na
+float sell_stopvol_dist = na
+float buy_near_abs = has_buy ? math.abs(buy_base_lo) * stopvol_near_pct * 0.01 : na
+float sell_near_abs = has_sell ? math.abs(sell_base_hi) * stopvol_near_pct * 0.01 : na
+if stop_mode == "STOPVOL_NEAR"
+    for i = 0 to array.size(z_id) - 1
+        bool same_tf_buy = has_buy and array.get(z_tf, i) == array.get(z_tf, buy_idx)
+        bool same_tf_sell = has_sell and array.get(z_tf, i) == array.get(z_tf, sell_idx)
+        bool active_stopvol = array.get(z_status, i) <= Z_TOUCHED and array.get(z_origin, i) == "STOPVOL"
+        if same_tf_buy and active_stopvol and not na(buy_near_abs)
+            float cand_buy_anchor = array.get(z_base_lo, i)
+            float cand_buy_dist = math.abs(cand_buy_anchor - buy_base_lo)
+            if cand_buy_dist <= buy_near_abs and (na(buy_stopvol_dist) or cand_buy_dist < buy_stopvol_dist)
+                buy_stopvol_dist := cand_buy_dist
+                buy_stop_anchor := math.min(buy_base_lo, cand_buy_anchor)
+        if same_tf_sell and active_stopvol and not na(sell_near_abs)
+            float cand_sell_anchor = array.get(z_base_hi, i)
+            float cand_sell_dist = math.abs(cand_sell_anchor - sell_base_hi)
+            if cand_sell_dist <= sell_near_abs and (na(sell_stopvol_dist) or cand_sell_dist < sell_stopvol_dist)
+                sell_stopvol_dist := cand_sell_dist
+                sell_stop_anchor := math.max(sell_base_hi, cand_sell_anchor)
+float buy_stop = has_buy and not na(buy_stop_anchor) and not na(buy_pad) ? buy_stop_anchor - buy_pad : na
+float sell_stop = has_sell and not na(sell_stop_anchor) and not na(sell_pad) ? sell_stop_anchor + sell_pad : na
 float buy_tp = has_buy ? buy_entry_plan + rr_fallback_atr * buy_atr : na
 float sell_tp = has_sell ? sell_entry_plan - rr_fallback_atr * sell_atr : na
 float best_buy_tp_dist = na

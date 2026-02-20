@@ -45,6 +45,8 @@
       "entry_plan_mode = input.string(\"POC\", \"Entry plan mode\", options=[\"POC\", \"ZONE_EDGE\"], group=\"Stages\")",
       "stop_pad_atr_mult = input.float(0.1, \"Stop pad ATR mult\", minval=0.0, step=0.05, group=\"Stages\")",
       "stop_pad_pct = input.float(0.5, \"Stop pad %\", minval=0.0, step=0.1, group=\"Stages\")",
+      "stop_mode = input.string(\"BASE\", \"Stop mode\", options=[\"BASE\", \"STOPVOL_NEAR\"], group=\"Stages\")",
+      "stopvol_near_pct = input.float(0.5, \"StopVol near threshold %\", minval=0.1, step=0.1, group=\"Stages\")",
       "rr_fallback_atr = input.float(3.0, \"RR fallback target ATR\", minval=0.5, step=0.5, group=\"Stages\")",
       "use_ema_bias_confirm = input.bool(true, \"Use EMA_BIAS\", group=\"Stages\")",
       "use_trap_confirm = input.bool(false, \"Use TRAP\", group=\"Stages\")",
