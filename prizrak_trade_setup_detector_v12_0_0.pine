@@ -1,5 +1,5 @@
 //@version=6
-indicator("Prizrak Trade Setup Detector v12.1.0", overlay=true, max_boxes_count=300, max_labels_count=300)
+indicator("Prizrak Trade Setup Detector v12.2.0", overlay=true, max_boxes_count=300, max_labels_count=300)
 
 mode_tf = input.string("AUTO", "TF mode", options=["AUTO", "MANUAL"], group="TF Hierarchy")
 manual_htf1 = input.timeframe("240", "Manual HTF1", group="TF Hierarchy")
@@ -7,50 +7,56 @@ manual_htf2 = input.timeframe("60", "Manual HTF2", group="TF Hierarchy")
 manual_ltf = input.timeframe("", "Manual LTF (blank = chart)", group="TF Hierarchy")
 auto_ltf_mode = input.string("AUTO_BY_CHART", "AUTO LTF mode", options=["AUTO_BY_CHART", "AUTO_BY_HTF2", "CHART"], group="TF Hierarchy")
 
-base_len = input.int(28, "HTF base length", minval=8, maxval=200, group="Zone Engine • HTF")
+base_len = input.int(28, "HTF base seek length", minval=8, maxval=200, group="Zone Engine • HTF")
+min_base_bars = input.int(12, "HTF min base bars", minval=4, maxval=300, group="Zone Engine • HTF")
 touch_tolerance = input.float(0.0025, "HTF base touch tolerance", minval=0.0005, step=0.0005, group="Zone Engine • HTF")
 min_touches = input.int(4, "HTF base min touches", minval=2, maxval=20, group="Zone Engine • HTF")
 max_range_atr = input.float(1.6, "HTF base max range ATR", minval=0.5, step=0.1, group="Zone Engine • HTF")
-exit_confirm_bars = input.int(2, "HTF base exit confirm bars", minval=1, maxval=6, group="Zone Engine • HTF")
+exit_confirm_bars = input.int(2, "HTF breakout confirm bars", minval=1, maxval=6, group="Zone Engine • HTF")
 htf_poc_pad_mult = input.float(0.35, "HTF POC pad ATR mult", minval=0.05, step=0.05, group="Zone Engine • HTF")
 htf_poc_bins = input.int(40, "HTF POC bins", minval=10, maxval=120, group="Zone Engine • HTF")
-htf_poc_price_mode = input.string("HLC3", "HTF POC price mode", options=["HLC3", "VWAP", "CLOSE"], group="Zone Engine • HTF")
 base_max_bars = input.int(300, "HTF max bars in base", minval=50, maxval=1000, group="Zone Engine • HTF")
 max_zones_per_tf = input.int(8, "Max zones per TF per side", minval=1, maxval=20, group="Zone Engine • HTF")
 max_age_bars = input.int(700, "Max age bars", minval=50, maxval=5000, group="Zone Engine • HTF")
 consume_reaction_atr_mult = input.float(0.9, "Consume reaction ATR mult", minval=0.2, step=0.1, group="Zone Engine • HTF")
 invalidate_confirm_bars = input.int(2, "Invalidate confirm bars", minval=1, maxval=5, group="Zone Engine • HTF")
 invalidate_pad_atr = input.float(0.1, "Invalidate pad ATR mult", minval=0.0, step=0.05, group="Zone Engine • HTF")
-body_confirm = input.bool(true, "Body confirm (close+body)", group="Zone Engine • HTF")
-flip_on_break = input.bool(true, "Flip zone on invalidation", group="Zone Engine • HTF")
+flip_on_break = input.bool(true, "Flip on break + retest", group="Zone Engine • HTF")
+flip_retest_bars = input.int(4, "Flip retest window (zone TF bars)", minval=1, maxval=20, group="Zone Engine • HTF")
 show_consumed_history = input.bool(false, "Show consumed history", group="Zone Engine • HTF")
 
-ltf_zone_mode = input.string("POC", "LTF entry zone mode", options=["POC", "ACCUM", "FLAT"], group="Zone Engine • LTF")
 use_ltf_entry_gate = input.bool(true, "Use LTF entry gate", group="Zone Engine • LTF")
 ltf_gate_mode = input.string("NEAR", "LTF gate mode", options=["NEAR", "IN_ZONE"], group="Zone Engine • LTF")
 ltf_near_atr = input.float(0.35, "LTF near ATR mult", minval=0.0, step=0.05, group="Zone Engine • LTF")
 ltf_poc_len = input.int(80, "LTF POC length", minval=20, maxval=500, group="Zone Engine • LTF")
 ltf_poc_bins = input.int(32, "LTF POC bins", minval=8, maxval=120, group="Zone Engine • LTF")
-ltf_poc_pad_mult = input.float(0.35, "LTF POC pad ATR mult", minval=0.05, step=0.05, group="Zone Engine • LTF")
 entry_break_len = input.int(2, "LTF trigger break lookback", minval=1, maxval=8, group="Zone Engine • LTF")
-trap_max_bars = input.int(6, "Trap max bars (zone TF)", minval=1, maxval=20, group="Zone Engine • LTF")
-trap_use_volume_gate = input.bool(false, "Trap volume gate", group="Zone Engine • LTF")
-trap_return_volume_mult = input.float(1.1, "Trap return volume mult", minval=0.5, step=0.1, group="Zone Engine • LTF")
 
 near_thr_atr = input.float(1.0, "Near threshold ATR multiple", minval=0.1, step=0.1, group="Stages")
 use_rr_gate = input.bool(true, "Use RR gate", group="Stages")
 rr_min = input.float(1.8, "Min RR", minval=0.5, step=0.1, group="Stages")
+entry_plan_mode = input.string("POC", "Entry plan mode", options=["POC", "ZONE_EDGE"], group="Stages")
 stop_pad_atr_mult = input.float(0.1, "Stop pad ATR mult", minval=0.0, step=0.05, group="Stages")
-stop_pad_pct = input.float(0.0, "Stop pad %", minval=0.0, step=0.05, group="Stages")
-confirm_mode = input.string("SCORE", "Confirm mode", options=["ALL", "ANY", "SCORE"], group="Stages")
-confirm_min_passed = input.int(2, "Confirm min passed", minval=1, maxval=4, group="Stages")
+stop_pad_pct = input.float(0.5, "Stop pad %", minval=0.0, step=0.1, group="Stages")
+rr_fallback_atr = input.float(3.0, "RR fallback target ATR", minval=0.5, step=0.5, group="Stages")
 use_ema_bias_confirm = input.bool(true, "Use EMA_BIAS", group="Stages")
 use_trap_confirm = input.bool(false, "Use TRAP", group="Stages")
 use_osc_confirm = input.bool(true, "Use RSI+MACD", group="Stages")
 
+pp_enabled = input.bool(true, "Enable PP confirm", group="Confirm • PP")
+pp_type = input.string("BOTH", "PP type", options=["TRUE", "EARLY", "BOTH"], group="Confirm • PP")
+pp_tf = input.timeframe("", "PP timeframe (blank = LTF)", group="Confirm • PP")
+pp_confirm_closes = input.int(2, "PP confirm closes", minval=2, maxval=3, group="Confirm • PP")
+pp_retest_window = input.int(8, "PP retest window", minval=2, maxval=30, group="Confirm • PP")
+
+trap_max_bars = input.int(6, "Trap max bars (zone TF)", minval=1, maxval=20, group="Trap")
+trap_use_volume_gate = input.bool(false, "Trap volume gate (zone TF volume)", group="Trap")
+trap_return_volume_mult = input.float(1.1, "Trap return volume mult", minval=0.5, step=0.1, group="Trap")
+
 show_hud = input.bool(true, "Show HUD", group="Visual")
 show_labels = input.bool(true, "Show stage icons", group="Visual")
-icon_keep = input.int(120, "Icons keep", minval=20, maxval=500, group="Visual")
+show_rr_lines = input.bool(true, "Show entry/stop/tp lines", group="Visual")
+icon_keep = input.int(90, "Icons keep", minval=20, maxval=250, group="Visual")
 zone_extend_bars = input.int(400, "Zone extend bars", minval=50, maxval=5000, group="Visual")
 
 int Z_ACTIVE = 0
@@ -65,14 +71,13 @@ string STAGE_IN_ZONE = "IN_ZONE"
 string STAGE_LTF_READY = "LTF_READY"
 string STAGE_CONFIRM_READY = "CONFIRM_READY"
 string STAGE_ENTRY = "ENTRY"
-string STAGE_BLOCKED = "BLOCKED"
 
-int BASE_OFF = 0
-int BASE_ON = 1
-int POST_BASE = 2
+int BASE_SEEK = 0
+int BASE_BUILD = 1
+int BASE_VALID = 2
+int BASE_BREAK_UP = 3
+int BASE_BREAK_DN = 4
 
-f_box(int _l, float _t, int _r, float _b, color _bg, color _bd, int _bw) => box.new(_l, _t, _r, _b, xloc=xloc.bar_time, bgcolor=_bg, border_color=_bd, border_width=_bw)
-f_label(int _x, float _y, string _t, color _c) => label.new(_x, _y, _t, xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.white, color=_c, size=size.tiny)
 f_tf_ms(string _tf) => int(timeframe.in_seconds(_tf) * 1000)
 f_clamp(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
 
@@ -82,125 +87,180 @@ string auto_htf2 = tf_sec <= 15 * 60 ? "60" : tf_sec <= 60 * 60 ? "240" : "D"
 string auto_ltf_by_chart = tf_sec <= 15 * 60 ? "5" : tf_sec <= 60 * 60 ? "15" : tf_sec <= 4 * 60 * 60 ? "60" : "240"
 string htf1 = mode_tf == "AUTO" ? auto_htf1 : manual_htf1
 string htf2 = mode_tf == "AUTO" ? auto_htf2 : manual_htf2
-string ltf_auto = auto_ltf_mode == "CHART" ? timeframe.period : auto_ltf_mode == "AUTO_BY_HTF2" ? htf2 : auto_ltf_by_chart
-string ltf = mode_tf == "AUTO" ? ltf_auto : (str.length(manual_ltf) == 0 ? timeframe.period : manual_ltf)
+string ltf_auto = auto_ltf_mode == "AUTO_BY_HTF2" ? (timeframe.in_seconds(htf2) <= 60 * 60 ? "5" : "15") : auto_ltf_by_chart
+string ltf = mode_tf == "AUTO" ? (auto_ltf_mode == "CHART" ? timeframe.period : ltf_auto) : (str.length(manual_ltf) > 0 ? manual_ltf : timeframe.period)
+string pp_tf_eff = str.length(pp_tf) > 0 ? pp_tf : ltf
 
-f_htf_pack(int _len, float _tol, int _touches_min, float _max_range_atr, int _exit_confirm, int _bins, string _price_mode, int _base_max_bars) =>
+f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, float _max_range_atr, int _exit_confirm, int _bins, int _base_max_bars) =>
     float atr = ta.atr(14)
-    float hi = ta.highest(high, _len)
-    float lo = ta.lowest(low, _len)
-    float rng = hi - lo
-    float eps = math.max(atr * _tol, syminfo.mintick)
-    bool near_hi = math.abs(high - hi) <= eps
-    bool near_lo = math.abs(low - lo) <= eps
-    var int state = BASE_OFF
+    var int st = BASE_SEEK
     var float base_hi = na
     var float base_lo = na
+    var int base_bars = 0
     var int touches_hi = 0
     var int touches_lo = 0
-    var int base_bars = 0
-    var int out_cnt_up = 0
-    var int out_cnt_dn = 0
-    var int dir = 0
-    var float poc_last = na
+    var bool in_hi_band_prev = false
+    var bool in_lo_band_prev = false
+    var int out_up = 0
+    var int out_dn = 0
+    var float poc = na
+    var float b_hi = na
+    var float b_lo = na
     bool edge_up = false
     bool edge_dn = false
 
-    bool range_ok = rng <= atr * _max_range_atr
-    bool start_base = state == BASE_OFF and range_ok
-    if start_base
-        state := BASE_ON
-        base_hi := high
-        base_lo := low
-        touches_hi := near_hi ? 1 : 0
-        touches_lo := near_lo ? 1 : 0
-        base_bars := 1
-        out_cnt_up := 0
-        out_cnt_dn := 0
+    if st == BASE_SEEK
+        float span_hi = ta.highest(high, _seek_len)
+        float span_lo = ta.lowest(low, _seek_len)
+        if (span_hi - span_lo) <= atr * _max_range_atr
+            st := BASE_BUILD
+            base_hi := high
+            base_lo := low
+            base_bars := 1
+            touches_hi := 0
+            touches_lo := 0
+            out_up := 0
+            out_dn := 0
+            in_hi_band_prev := false
+            in_lo_band_prev := false
 
-    if state == BASE_ON
+    if st == BASE_BUILD or st == BASE_VALID
+        float tol_abs = math.max(_tol * close, atr * 0.05)
+        float prev_hi = base_hi
+        float prev_lo = base_lo
+        bool hi_band = math.abs(close - prev_hi) <= tol_abs
+        bool lo_band = math.abs(close - prev_lo) <= tol_abs
+        if hi_band and not in_hi_band_prev
+            touches_hi += 1
+        if lo_band and not in_lo_band_prev
+            touches_lo += 1
+        in_hi_band_prev := hi_band
+        in_lo_band_prev := lo_band
+
         base_hi := math.max(base_hi, high)
         base_lo := math.min(base_lo, low)
-        touches_hi += near_hi ? 1 : 0
-        touches_lo += near_lo ? 1 : 0
         base_bars += 1
-        bool touches_ok = touches_hi >= _touches_min and touches_lo >= _touches_min
-        bool flat_ok = (base_hi - base_lo) <= atr * _max_range_atr
-        bool keep_base = touches_ok and flat_ok and base_bars <= _base_max_bars
-        if not keep_base
-            state := POST_BASE
-            out_cnt_up := 0
-            out_cnt_dn := 0
+        float base_range = base_hi - base_lo
 
-    if state == POST_BASE
-        bool back_inside = close <= base_hi and close >= base_lo
-        if back_inside
-            state := BASE_ON
-            out_cnt_up := 0
-            out_cnt_dn := 0
-        else
-            out_cnt_up := close > base_hi ? out_cnt_up + 1 : 0
-            out_cnt_dn := close < base_lo ? out_cnt_dn + 1 : 0
-            edge_up := out_cnt_up >= _exit_confirm
-            edge_dn := out_cnt_dn >= _exit_confirm
-            if edge_up or edge_dn
-                dir := edge_up ? 1 : -1
+        bool valid_now = base_bars >= _min_base_bars and touches_hi >= _min_touches and touches_lo >= _min_touches and base_range <= atr * _max_range_atr
+        if st == BASE_BUILD and valid_now
+            st := BASE_VALID
+
+        if base_range > atr * (_max_range_atr * 1.3) or base_bars > _base_max_bars
+            st := BASE_SEEK
+
+        if st == BASE_VALID
+            out_up := close > base_hi ? out_up + 1 : 0
+            out_dn := close < base_lo ? out_dn + 1 : 0
+            if out_up >= _exit_confirm or out_dn >= _exit_confirm
+                edge_up := out_up >= _exit_confirm
+                edge_dn := out_dn >= _exit_confirm
+                st := edge_up ? BASE_BREAK_UP : BASE_BREAK_DN
+                b_hi := base_hi
+                b_lo := base_lo
                 int bars_cap = math.max(math.min(base_bars, _base_max_bars), 1)
-                float base_min = ta.lowest(low, bars_cap)
-                float base_max = ta.highest(high, bars_cap)
-                float den = math.max(base_max - base_min, syminfo.mintick)
-                float[] vols = array.new_float(_bins, 0.0)
-                for j = 0 to bars_cap - 1
-                    float psrc = _price_mode == "CLOSE" ? close[j] : _price_mode == "VWAP" ? (high[j] + low[j] + close[j]) / 3.0 : hlc3[j]
-                    int bin_idx = f_clamp(int(math.floor((psrc - base_min) / den * (_bins - 1))), 0, _bins - 1)
-                    array.set(vols, bin_idx, array.get(vols, bin_idx) + volume[j])
-                int max_idx = 0
-                float vmax = -1.0
+                float den = math.max(b_hi - b_lo, syminfo.mintick)
+                var float[] bins = array.new_float(_bins, 0.0)
+                if array.size(bins) != _bins
+                    bins := array.new_float(_bins, 0.0)
                 for bi = 0 to _bins - 1
-                    float vj = array.get(vols, bi)
-                    if vj > vmax
-                        vmax := vj
+                    array.set(bins, bi, 0.0)
+                for j = 0 to bars_cap - 1
+                    int idx = f_clamp(int(math.floor((hlc3[j] - b_lo) / den * (_bins - 1))), 0, _bins - 1)
+                    array.set(bins, idx, array.get(bins, idx) + volume[j])
+                float vmax = -1.0
+                int max_idx = 0
+                for bi = 0 to _bins - 1
+                    float v = array.get(bins, bi)
+                    if v > vmax
+                        vmax := v
                         max_idx := bi
                 float bw = den / _bins
-                poc_last := base_min + bw * max_idx + bw * 0.5
-                state := BASE_OFF
-                touches_hi := 0
-                touches_lo := 0
-                base_bars := 0
-                out_cnt_up := 0
-                out_cnt_dn := 0
+                poc := b_lo + bw * max_idx + bw * 0.5
 
-    [edge_up ? 1.0 : 0.0, edge_dn ? 1.0 : 0.0, atr, base_hi, base_lo, poc_last, time * 1.0, close, open]
+    if st == BASE_BREAK_UP or st == BASE_BREAK_DN
+        st := BASE_SEEK
+        base_hi := na
+        base_lo := na
+        base_bars := 0
+        touches_hi := 0
+        touches_lo := 0
+        out_up := 0
+        out_dn := 0
 
-[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open] = request.security(syminfo.tickerid, htf1, f_htf_pack(base_len, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, htf_poc_price_mode, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
-[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open] = request.security(syminfo.tickerid, htf2, f_htf_pack(base_len, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, htf_poc_price_mode, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    [edge_up ? 1.0 : 0.0, edge_dn ? 1.0 : 0.0, atr, b_hi, b_lo, poc, time * 1.0, close, open, high, low, volume]
 
-f_ltf_pack(int _accum_len, int _poc_len, int _poc_bins) =>
+[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol] = request.security(syminfo.tickerid, htf1, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol] = request.security(syminfo.tickerid, htf2, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+f_ltf_pack(int _len, int _bins, int _break_len) =>
     float atr = ta.atr(14)
-    float ah = ta.highest(high, _accum_len)
-    float al = ta.lowest(low, _accum_len)
-    float ph = ta.highest(high, _poc_len)
-    float pl = ta.lowest(low, _poc_len)
+    float ph = ta.highest(high, _len)
+    float pl = ta.lowest(low, _len)
     float den = math.max(ph - pl, syminfo.mintick)
-    float[] vols = array.new_float(_poc_bins, 0.0)
-    for j = 0 to _poc_len - 1
-        int idx = f_clamp(int(math.floor((hlc3[j] - pl) / den * (_poc_bins - 1))), 0, _poc_bins - 1)
-        array.set(vols, idx, array.get(vols, idx) + volume[j])
-    int max_idx = 0
+    var float[] bins = array.new_float(_bins, 0.0)
+    if array.size(bins) != _bins
+        bins := array.new_float(_bins, 0.0)
+    for bi = 0 to _bins - 1
+        array.set(bins, bi, 0.0)
+    for j = 0 to _len - 1
+        int idx = f_clamp(int(math.floor((hlc3[j] - pl) / den * (_bins - 1))), 0, _bins - 1)
+        array.set(bins, idx, array.get(bins, idx) + volume[j])
     float vmax = -1.0
-    for bi = 0 to _poc_bins - 1
-        float vb = array.get(vols, bi)
-        if vb > vmax
-            vmax := vb
+    int max_idx = 0
+    for bi = 0 to _bins - 1
+        float vv = array.get(bins, bi)
+        if vv > vmax
+            vmax := vv
             max_idx := bi
-    float bw = den / _poc_bins
+    float bw = den / _bins
     float poc = pl + bw * max_idx + bw * 0.5
-    bool flat_ok = (ah - al) <= atr * 1.4
-    float trig_up = ta.highest(high, entry_break_len)
-    float trig_dn = ta.lowest(low, entry_break_len)
-    [atr, ah, al, poc, flat_ok ? 1.0 : 0.0, trig_up, trig_dn]
+    [atr, poc, ta.highest(high, _break_len), ta.lowest(low, _break_len), close, time * 1.0]
 
-[ltf_atr, ltf_ah, ltf_al, ltf_poc, ltf_flatf, ltf_trig_up, ltf_trig_dn] = request.security(syminfo.tickerid, ltf, f_ltf_pack(base_len, ltf_poc_len, ltf_poc_bins), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[ltf_atr, ltf_poc, ltf_trig_up, ltf_trig_dn, ltf_close, ltf_timef] = request.security(syminfo.tickerid, ltf, f_ltf_pack(ltf_poc_len, ltf_poc_bins, entry_break_len), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+f_pp_pack(int _cc, int _rw) =>
+    var float last_sh = na
+    var float last_sl = na
+    var int bull_break = na
+    var int bear_break = na
+    var float bull_lvl = na
+    var float bear_lvl = na
+    var bool bull_ok = false
+    var bool bear_ok = false
+    float ph = ta.pivothigh(high, 2, 2)
+    float pl = ta.pivotlow(low, 2, 2)
+    if not na(ph)
+        last_sh := ph
+    if not na(pl)
+        last_sl := pl
+    if not na(last_sh) and close > last_sh
+        bull_break := bar_index
+        bull_lvl := last_sh
+        bull_ok := false
+    if not na(last_sl) and close < last_sl
+        bear_break := bar_index
+        bear_lvl := last_sl
+        bear_ok := false
+    bool bull_retest = not na(bull_break) and bar_index - bull_break <= _rw and low <= bull_lvl and close >= bull_lvl
+    bool bear_retest = not na(bear_break) and bar_index - bear_break <= _rw and high >= bear_lvl and close <= bear_lvl
+    bool bull_bodies = close > bull_lvl and close[1] > bull_lvl and (_cc == 2 or close[2] > bull_lvl)
+    bool bear_bodies = close < bear_lvl and close[1] < bear_lvl and (_cc == 2 or close[2] < bear_lvl)
+    if bull_retest and bull_bodies
+        bull_ok := true
+    if bear_retest and bear_bodies
+        bear_ok := true
+    float early_bull_lvl = ta.highest(high, 5)[1]
+    float early_bear_lvl = ta.lowest(low, 5)[1]
+    bool eb = close > early_bull_lvl and close[1] <= early_bull_lvl
+    bool es = close < early_bear_lvl and close[1] >= early_bear_lvl
+    bool early_bull_ok = eb and low <= early_bull_lvl and close >= early_bull_lvl
+    bool early_bear_ok = es and high >= early_bear_lvl and close <= early_bear_lvl
+    float bull_state = bull_ok ? 1.0 : (not na(bull_break) and bar_index - bull_break <= _rw ? 0.0 : -1.0)
+    float bear_state = bear_ok ? 1.0 : (not na(bear_break) and bar_index - bear_break <= _rw ? 0.0 : -1.0)
+    [bull_state, bear_state, early_bull_ok ? 1.0 : 0.0, early_bear_ok ? 1.0 : 0.0]
+
+[pp_true_buy_state, pp_true_sell_state, pp_early_buy_okf, pp_early_sell_okf] = request.security(syminfo.tickerid, pp_tf_eff, f_pp_pack(pp_confirm_closes, pp_retest_window), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 
 var int[] z_id = array.new_int()
 var int[] z_type = array.new_int()
@@ -217,20 +277,11 @@ var int[] z_inv_cnt = array.new_int()
 var int[] z_last_tf_time = array.new_int()
 var float[] z_base_hi = array.new_float()
 var float[] z_base_lo = array.new_float()
+var int[] z_break_time = array.new_int()
 var box[] z_box = array.new_box()
 var label[] z_label = array.new_label()
 var int zid_seq = 0
 var label[] event_icons = array.new_label()
-var float buy_last_break_level = na
-var int buy_last_break_time = na
-var int buy_last_break_zone_id = na
-var float buy_last_break_volume = na
-var float sell_last_break_level = na
-var int sell_last_break_time = na
-var int sell_last_break_zone_id = na
-var float sell_last_break_volume = na
-
-f_zone_status_text(int _s) => _s == Z_ACTIVE ? "ACTIVE" : _s == Z_TOUCHED ? "TOUCHED" : _s == Z_CONSUMED ? "CONSUMED" : _s == Z_INVALID ? "INVALID" : "EXPIRED"
 
 f_push_icon(string _txt, color _bg, bool _up) =>
     label ic = label.new(time, close, _txt, xloc=xloc.bar_time, style=_up ? label.style_label_up : label.style_label_down, color=_bg, textcolor=color.white, size=size.tiny)
@@ -245,8 +296,10 @@ f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi,
     float pad = _atr * htf_poc_pad_mult
     float top = _poc + pad
     float bot = _poc - pad
-    box b = f_box(_t, top, time + f_tf_ms(_tf) * zone_extend_bars, bot, color.new(_type == 1 ? color.green : color.red, _tf == htf1 ? 84 : 90), color.new(_type == 1 ? color.green : color.red, 0), 1)
-    label lb = f_label(_t, _type == 1 ? bot : top, (_type == 1 ? "BUY" : "SELL") + " POC (" + _tf + ") " + str.tostring(_poc, format.mintick), color.new(_type == 1 ? color.green : color.red, 20))
+    color col = _type == 1 ? color.green : color.red
+    int opa = _tf == htf1 ? 82 : 90
+    box b = box.new(_t, top, time + f_tf_ms(_tf) * zone_extend_bars, bot, xloc=xloc.bar_time, bgcolor=color.new(col, opa), border_color=color.new(col, 0), border_width=1)
+    label lb = label.new(_t, _type == 1 ? bot : top, (_type == 1 ? "BUY" : "SELL") + " POC (" + _tf + ")", xloc=xloc.bar_time, textcolor=color.white, color=color.new(col, 20), size=size.tiny, style=label.style_label_left)
     array.push(z_id, zid_seq)
     array.push(z_type, _type)
     array.push(z_status, Z_ACTIVE)
@@ -262,6 +315,7 @@ f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi,
     array.push(z_last_tf_time, _t)
     array.push(z_base_hi, _bhi)
     array.push(z_base_lo, _blo)
+    array.push(z_break_time, na)
     array.push(z_box, b)
     array.push(z_label, lb)
 
@@ -287,94 +341,92 @@ f_remove_zone(int i) =>
     array.remove(z_last_tf_time, i)
     array.remove(z_base_hi, i)
     array.remove(z_base_lo, i)
+    array.remove(z_break_time, i)
     array.remove(z_box, i)
     array.remove(z_label, i)
 
-bool htf1_new_up = htf1_edge_up > 0 and htf1_edge_up[1] <= 0
-bool htf1_new_dn = htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0
-bool htf2_new_up = htf2_edge_up > 0 and htf2_edge_up[1] <= 0
-bool htf2_new_dn = htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0
-if htf1_new_up and not na(htf1_poc)
-    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl)
-if htf1_new_dn and not na(htf1_poc)
-    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl)
-if htf2_new_up and not na(htf2_poc)
-    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl)
-if htf2_new_dn and not na(htf2_poc)
-    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl)
-
-bool zone_created = htf1_new_up or htf1_new_dn or htf2_new_up or htf2_new_dn
+bool zone_created = false
 bool zone_invalidated = false
 bool zone_consumed = false
 bool zone_flipped = false
 
+if htf1_edge_up > 0 and htf1_edge_up[1] <= 0 and not na(htf1_poc)
+    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl)
+    zone_created := true
+if htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0 and not na(htf1_poc)
+    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl)
+    zone_created := true
+if htf2_edge_up > 0 and htf2_edge_up[1] <= 0 and not na(htf2_poc)
+    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl)
+    zone_created := true
+if htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0 and not na(htf2_poc)
+    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl)
+    zone_created := true
+
 for i = array.size(z_id) - 1 to 0
-    int zi_status = array.get(z_status, i)
-    string ztf = array.get(z_tf, i)
+    int typ = array.get(z_type, i)
+    int st = array.get(z_status, i)
+    string tfz = array.get(z_tf, i)
     float top = array.get(z_top, i)
     float bot = array.get(z_bot, i)
-    float zat = array.get(z_atr, i)
-    int zt = array.get(z_time, i)
-    int ztp = array.get(z_type, i)
-    int age = int((time - zt) / math.max(f_tf_ms(ztf), 1))
-    bool inside = high >= bot and low <= top
-    bool prev_inside = array.get(z_inside_prev, i)
-    if inside and not prev_inside and zi_status <= Z_TOUCHED
+    float atrz = array.get(z_atr, i)
+    int htime = int(tfz == htf1 ? htf1_timef : htf2_timef)
+    float hclose = tfz == htf1 ? htf1_close : htf2_close
+    float hhigh = tfz == htf1 ? htf1_high : htf2_high
+    float hlow = tfz == htf1 ? htf1_low : htf2_low
+    float hvol = tfz == htf1 ? htf1_vol : htf2_vol
+
+    bool inside = close <= top and close >= bot
+    bool was_inside = array.get(z_inside_prev, i)
+    if inside and not was_inside and st <= Z_TOUCHED
         array.set(z_touch, i, array.get(z_touch, i) + 1)
         array.set(z_status, i, Z_TOUCHED)
     array.set(z_inside_prev, i, inside)
 
-    float reaction = ztp == 1 ? high - top : bot - low
-    bool consumed_now = array.get(z_touch, i) > 0 and reaction >= consume_reaction_atr_mult * zat
-    if consumed_now and zi_status <= Z_TOUCHED
+    bool consumed_now = false
+    if array.get(z_touch, i) >= 1 and st <= Z_TOUCHED
+        consumed_now := typ == 1 ? (high - top) >= atrz * consume_reaction_atr_mult : (bot - low) >= atrz * consume_reaction_atr_mult
+    if consumed_now
         array.set(z_status, i, Z_CONSUMED)
         zone_consumed := true
 
-    float hclose = ztf == htf1 ? htf1_close : htf2_close
-    float hopen = ztf == htf1 ? htf1_open : htf2_open
-    int htime = int(ztf == htf1 ? htf1_timef : htf2_timef)
-    int last_time = array.get(z_last_tf_time, i)
     int inv_cnt = array.get(z_inv_cnt, i)
-    float inv_pad = zat * invalidate_pad_atr
-    bool body_dn = body_confirm ? (hclose < bot - inv_pad and hopen < bot - inv_pad) : hclose < bot - inv_pad
-    bool body_up = body_confirm ? (hclose > top + inv_pad and hopen > top + inv_pad) : hclose > top + inv_pad
-    if htime != last_time
-        inv_cnt := ztp == 1 ? (body_dn ? inv_cnt + 1 : 0) : (body_up ? inv_cnt + 1 : 0)
+    int last_t = array.get(z_last_tf_time, i)
+    float inv_pad = atrz * invalidate_pad_atr
+    bool inv_body = typ == 1 ? hclose < bot - inv_pad : hclose > top + inv_pad
+    if htime != last_t
+        inv_cnt := inv_body ? inv_cnt + 1 : 0
         array.set(z_inv_cnt, i, inv_cnt)
         array.set(z_last_tf_time, i, htime)
-    bool inv_now = inv_cnt >= invalidate_confirm_bars
-    if inv_now and zi_status <= Z_TOUCHED
-        if ztp == 1
-            buy_last_break_level := bot
-            buy_last_break_time := htime
-            buy_last_break_zone_id := array.get(z_id, i)
-            buy_last_break_volume := volume
-        else
-            sell_last_break_level := top
-            sell_last_break_time := htime
-            sell_last_break_zone_id := array.get(z_id, i)
-            sell_last_break_volume := volume
+    if inv_cnt >= invalidate_confirm_bars and st <= Z_TOUCHED
         array.set(z_status, i, Z_INVALID)
+        array.set(z_break_time, i, htime)
         zone_invalidated := true
-        if flip_on_break
-            f_create_zone(-ztp, ztf, array.get(z_poc, i), zat, time, array.get(z_base_hi, i), array.get(z_base_lo, i))
-            zone_flipped := true
 
-    if age > max_age_bars and zi_status <= Z_TOUCHED
+    if flip_on_break and array.get(z_status, i) == Z_INVALID
+        int bt = array.get(z_break_time, i)
+        bool in_win = not na(bt) and int((htime - bt) / math.max(f_tf_ms(tfz), 1)) <= flip_retest_bars
+        bool retest_ok = typ == 1 ? hhigh >= bot and hclose <= bot : hlow <= top and hclose >= top
+        if in_win and retest_ok
+            f_create_zone(-typ, tfz, array.get(z_poc, i), atrz, time, array.get(z_base_hi, i), array.get(z_base_lo, i))
+            zone_flipped := true
+            array.set(z_break_time, i, na)
+
+    int age = int((time - array.get(z_time, i)) / math.max(f_tf_ms(tfz), 1))
+    if age > max_age_bars and array.get(z_status, i) <= Z_TOUCHED
         array.set(z_status, i, Z_EXPIRED)
 
-    int st = array.get(z_status, i)
-    bool keep = st == Z_ACTIVE or st == Z_TOUCHED or (show_consumed_history and st == Z_CONSUMED)
+    int st_now = array.get(z_status, i)
+    bool keep = st_now == Z_ACTIVE or st_now == Z_TOUCHED or (show_consumed_history and st_now == Z_CONSUMED)
     if not keep
         f_remove_zone(i)
     else
-        box b = array.get(z_box, i)
+        box bx = array.get(z_box, i)
         label lb = array.get(z_label, i)
-        if not na(b)
-            box.set_right(b, time + f_tf_ms(ztf) * zone_extend_bars)
-            box.set_border_width(b, st <= Z_TOUCHED ? 2 : 1)
+        if not na(bx)
+            box.set_right(bx, time + f_tf_ms(tfz) * zone_extend_bars)
         if not na(lb)
-            label.set_text(lb, (ztp == 1 ? "BUY POC (" : "SELL POC (") + ztf + ") " + str.tostring(array.get(z_poc, i), format.mintick) + " " + f_zone_status_text(st))
+            label.set_text(lb, (typ == 1 ? "BUY " : "SELL ") + tfz + " T:" + str.tostring(array.get(z_touch, i)))
 
 while array.size(z_id) > max_zones_per_tf * 4
     f_remove_zone(0)
@@ -384,11 +436,10 @@ int sell_idx = -1
 float buy_dist = 10e10
 float sell_dist = 10e10
 for i = 0 to array.size(z_id) - 1
-    int st = array.get(z_status, i)
-    if st <= Z_TOUCHED
+    if array.get(z_status, i) <= Z_TOUCHED
         float top = array.get(z_top, i)
         float bot = array.get(z_bot, i)
-        float d = close > top ? close - top : close < bot ? bot - close : 0
+        float d = close > top ? close - top : close < bot ? bot - close : 0.0
         int typ = array.get(z_type, i)
         if typ == 1 and d < buy_dist
             buy_dist := d
@@ -399,156 +450,142 @@ for i = 0 to array.size(z_id) - 1
 
 bool has_buy = buy_idx >= 0
 bool has_sell = sell_idx >= 0
-
 float buy_top = has_buy ? array.get(z_top, buy_idx) : na
 float buy_bot = has_buy ? array.get(z_bot, buy_idx) : na
+float buy_poc = has_buy ? array.get(z_poc, buy_idx) : na
 float buy_atr = has_buy ? array.get(z_atr, buy_idx) : na
 float sell_top = has_sell ? array.get(z_top, sell_idx) : na
 float sell_bot = has_sell ? array.get(z_bot, sell_idx) : na
+float sell_poc = has_sell ? array.get(z_poc, sell_idx) : na
 float sell_atr = has_sell ? array.get(z_atr, sell_idx) : na
 
-bool buy_inside = has_buy and high >= buy_bot and low <= buy_top
-bool sell_inside = has_sell and high >= sell_bot and low <= sell_top
-bool buy_near = has_buy and not buy_inside and math.min(math.abs(close - buy_top), math.abs(close - buy_bot)) <= near_thr_atr * buy_atr
-bool sell_near = has_sell and not sell_inside and math.min(math.abs(close - sell_top), math.abs(close - sell_bot)) <= near_thr_atr * sell_atr
-int buy_zone_id = has_buy ? array.get(z_id, buy_idx) : na
-int sell_zone_id = has_sell ? array.get(z_id, sell_idx) : na
-var int prev_buy_zone_id = na
-var int prev_sell_zone_id = na
-var bool prev_buy_inside = false
-var bool prev_sell_inside = false
-var bool prev_buy_near = false
-var bool prev_sell_near = false
-if buy_zone_id != prev_buy_zone_id
-    prev_buy_inside := false
-    prev_buy_near := false
-if sell_zone_id != prev_sell_zone_id
-    prev_sell_inside := false
-    prev_sell_near := false
-bool buy_in_zone_edge = buy_inside and not prev_buy_inside
-bool sell_in_zone_edge = sell_inside and not prev_sell_inside
-bool buy_near_edge = buy_near and not prev_buy_near
-bool sell_near_edge = sell_near and not prev_sell_near
+bool buy_in_zone = has_buy and close >= buy_bot and close <= buy_top
+bool sell_in_zone = has_sell and close >= sell_bot and close <= sell_top
+bool buy_near = has_buy and buy_dist <= near_thr_atr * buy_atr
+bool sell_near = has_sell and sell_dist <= near_thr_atr * sell_atr
+bool ltf_gate_ok_buy = has_buy and (not use_ltf_entry_gate or (ltf_gate_mode == "IN_ZONE" ? buy_in_zone : buy_near or (buy_dist <= ltf_near_atr * ltf_atr)))
+bool ltf_gate_ok_sell = has_sell and (not use_ltf_entry_gate or (ltf_gate_mode == "IN_ZONE" ? sell_in_zone : sell_near or (sell_dist <= ltf_near_atr * ltf_atr)))
 
-float ltf_top = ltf_zone_mode == "ACCUM" ? ltf_ah : ltf_zone_mode == "FLAT" ? ltf_ah : ltf_poc + ltf_atr * ltf_poc_pad_mult
-float ltf_bot = ltf_zone_mode == "ACCUM" ? ltf_al : ltf_zone_mode == "FLAT" ? ltf_al : ltf_poc - ltf_atr * ltf_poc_pad_mult
-bool ltf_inside = high >= ltf_bot and low <= ltf_top
-bool ltf_near = math.min(math.abs(close - ltf_top), math.abs(close - ltf_bot)) <= ltf_near_atr * ltf_atr
-bool ltf_gate_ok_buy = has_buy and (not use_ltf_entry_gate or (ltf_gate_mode == "IN_ZONE" ? ltf_inside : ltf_near))
-bool ltf_gate_ok_sell = has_sell and (not use_ltf_entry_gate or (ltf_gate_mode == "IN_ZONE" ? ltf_inside : ltf_near))
-bool ltf_ready_buy_edge = ltf_gate_ok_buy and not ltf_gate_ok_buy[1]
-bool ltf_ready_sell_edge = ltf_gate_ok_sell and not ltf_gate_ok_sell[1]
+float ema_fast = ta.ema(close, 21)
+float ema_slow = ta.ema(close, 55)
+bool ema_bias_ok_buy = not use_ema_bias_confirm or ema_fast > ema_slow
+bool ema_bias_ok_sell = not use_ema_bias_confirm or ema_fast < ema_slow
 
-float ema_fast = ta.ema(close, 34)
-float ema_slow = ta.ema(close, 89)
-int ema_bias_dir = ema_fast > ema_slow ? 1 : ema_fast < ema_slow ? -1 : 0
-bool ema_bias_ok_buy = not use_ema_bias_confirm or ema_bias_dir == 1
-bool ema_bias_ok_sell = not use_ema_bias_confirm or ema_bias_dir == -1
-float rsi = ta.rsi(close, 14)
 float macd = ta.ema(close, 12) - ta.ema(close, 26)
-float macd_sig = ta.ema(macd, 9)
-bool osc_ok_buy = not use_osc_confirm or (rsi > 50 and macd > macd_sig)
-bool osc_ok_sell = not use_osc_confirm or (rsi < 50 and macd < macd_sig)
+float signal = ta.ema(macd, 9)
+float rsi = ta.rsi(close, 14)
+bool osc_ok_buy = not use_osc_confirm or (macd > signal and rsi > 50)
+bool osc_ok_sell = not use_osc_confirm or (macd < signal and rsi < 50)
 
-int buy_tf_ms = has_buy ? f_tf_ms(array.get(z_tf, buy_idx)) : 1
-int sell_tf_ms = has_sell ? f_tf_ms(array.get(z_tf, sell_idx)) : 1
-int buy_tf_bars_since_break = has_buy and not na(buy_last_break_time) ? int((time - buy_last_break_time) / math.max(buy_tf_ms, 1)) : 100000
-int sell_tf_bars_since_break = has_sell and not na(sell_last_break_time) ? int((time - sell_last_break_time) / math.max(sell_tf_ms, 1)) : 100000
-bool trap_buy_event = has_buy and buy_zone_id == buy_last_break_zone_id and not na(buy_last_break_level) and close > buy_last_break_level and buy_tf_bars_since_break <= trap_max_bars and (not trap_use_volume_gate or volume >= buy_last_break_volume * trap_return_volume_mult)
-bool trap_sell_event = has_sell and sell_zone_id == sell_last_break_zone_id and not na(sell_last_break_level) and close < sell_last_break_level and sell_tf_bars_since_break <= trap_max_bars and (not trap_use_volume_gate or volume >= sell_last_break_volume * trap_return_volume_mult)
-bool trap_ok_buy = not use_trap_confirm or trap_buy_event
-bool trap_ok_sell = not use_trap_confirm or trap_sell_event
+bool pp_true_buy_ok = pp_true_buy_state > 0
+bool pp_true_sell_ok = pp_true_sell_state > 0
+bool pp_early_buy_ok = pp_early_buy_okf > 0
+bool pp_early_sell_ok = pp_early_sell_okf > 0
+bool pp_ok_buy = not pp_enabled or (pp_type == "TRUE" ? pp_true_buy_ok : pp_type == "EARLY" ? pp_early_buy_ok : (pp_true_buy_ok or pp_early_buy_ok))
+bool pp_ok_sell = not pp_enabled or (pp_type == "TRUE" ? pp_true_sell_ok : pp_type == "EARLY" ? pp_early_sell_ok : (pp_true_sell_ok or pp_early_sell_ok))
+string pp_state_buy = pp_ok_buy ? "OK" : (pp_true_buy_state == 0 ? "WAI" : "BAD")
+string pp_state_sell = pp_ok_sell ? "OK" : (pp_true_sell_state == 0 ? "WAI" : "BAD")
 
-float buy_base_lo = has_buy ? array.get(z_base_lo, buy_idx) : na
-float buy_base_hi = has_buy ? array.get(z_base_hi, buy_idx) : na
-float sell_base_lo = has_sell ? array.get(z_base_lo, sell_idx) : na
-float sell_base_hi = has_sell ? array.get(z_base_hi, sell_idx) : na
-float buy_pad = has_buy ? math.max(buy_atr * stop_pad_atr_mult, close * stop_pad_pct * 0.01) : na
-float sell_pad = has_sell ? math.max(sell_atr * stop_pad_atr_mult, close * stop_pad_pct * 0.01) : na
-float buy_stop = has_buy ? buy_base_lo - buy_pad : na
-float sell_stop = has_sell ? sell_base_hi + sell_pad : na
-float buy_opp = na
-float sell_opp = na
+bool trap_buy_event = has_buy and low < buy_bot and close >= buy_bot
+bool trap_sell_event = has_sell and high > sell_top and close <= sell_top
+bool trap_type2_buy = has_buy and close > buy_top and ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars) <= ltf_atr
+bool trap_type2_sell = has_sell and close < sell_bot and ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars) <= ltf_atr
+bool trap_vol_ok_buy = not trap_use_volume_gate or htf1_vol >= ta.sma(htf1_vol, 20) * trap_return_volume_mult or htf2_vol >= ta.sma(htf2_vol, 20) * trap_return_volume_mult
+bool trap_vol_ok_sell = not trap_use_volume_gate or htf1_vol >= ta.sma(htf1_vol, 20) * trap_return_volume_mult or htf2_vol >= ta.sma(htf2_vol, 20) * trap_return_volume_mult
+bool trap_ok_buy = not use_trap_confirm or ((trap_buy_event or trap_type2_buy) and trap_vol_ok_buy)
+bool trap_ok_sell = not use_trap_confirm or ((trap_sell_event or trap_type2_sell) and trap_vol_ok_sell)
+
+float buy_entry_plan = has_buy ? (entry_plan_mode == "POC" ? buy_poc : buy_top) : na
+float sell_entry_plan = has_sell ? (entry_plan_mode == "POC" ? sell_poc : sell_bot) : na
+float buy_stop = has_buy ? array.get(z_base_lo, buy_idx) - math.max(array.get(z_base_lo, buy_idx) * stop_pad_pct * 0.01, buy_atr * stop_pad_atr_mult) : na
+float sell_stop = has_sell ? array.get(z_base_hi, sell_idx) + math.max(array.get(z_base_hi, sell_idx) * stop_pad_pct * 0.01, sell_atr * stop_pad_atr_mult) : na
+float buy_tp = has_buy ? buy_entry_plan + rr_fallback_atr * buy_atr : na
+float sell_tp = has_sell ? sell_entry_plan - rr_fallback_atr * sell_atr : na
 for i = 0 to array.size(z_id) - 1
-    if array.get(z_status, i) <= Z_TOUCHED
-        if has_buy and array.get(z_type, i) == -1 and array.get(z_tf, i) == array.get(z_tf, buy_idx)
-            float p = array.get(z_poc, i)
-            buy_opp := na(buy_opp) or (p > close and p < buy_opp) ? p : buy_opp
-        if has_sell and array.get(z_type, i) == 1 and array.get(z_tf, i) == array.get(z_tf, sell_idx)
-            float p2 = array.get(z_poc, i)
-            sell_opp := na(sell_opp) or (p2 < close and p2 > sell_opp) ? p2 : sell_opp
-float buy_risk = has_buy ? close - buy_stop : na
-float sell_risk = has_sell ? sell_stop - close : na
-float buy_target = has_buy ? (na(buy_opp) ? close + buy_atr * 2.0 : buy_opp) : na
-float sell_target = has_sell ? (na(sell_opp) ? close - sell_atr * 2.0 : sell_opp) : na
-float buy_reward = has_buy ? buy_target - close : na
-float sell_reward = has_sell ? close - sell_target : na
-float buy_rr = (not na(buy_risk) and buy_risk > syminfo.mintick and not na(buy_reward) and buy_reward > 0) ? buy_reward / buy_risk : na
-float sell_rr = (not na(sell_risk) and sell_risk > syminfo.mintick and not na(sell_reward) and sell_reward > 0) ? sell_reward / sell_risk : na
-bool rr_ok_buy = not use_rr_gate or (not na(buy_rr) and buy_rr >= rr_min)
-bool rr_ok_sell = not use_rr_gate or (not na(sell_rr) and sell_rr >= rr_min)
+    if has_buy and array.get(z_type, i) == -1 and array.get(z_status, i) <= Z_TOUCHED and array.get(z_tf, i) == array.get(z_tf, buy_idx)
+        buy_tp := array.get(z_poc, i)
+    if has_sell and array.get(z_type, i) == 1 and array.get(z_status, i) <= Z_TOUCHED and array.get(z_tf, i) == array.get(z_tf, sell_idx)
+        sell_tp := array.get(z_poc, i)
 
-int confirms_buy = (ema_bias_ok_buy ? 1 : 0) + (trap_ok_buy ? 1 : 0) + (osc_ok_buy ? 1 : 0) + (rr_ok_buy ? 1 : 0)
-int confirms_sell = (ema_bias_ok_sell ? 1 : 0) + (trap_ok_sell ? 1 : 0) + (osc_ok_sell ? 1 : 0) + (rr_ok_sell ? 1 : 0)
-bool confirm_ok_buy = confirm_mode == "ALL" ? (ema_bias_ok_buy and trap_ok_buy and osc_ok_buy and rr_ok_buy) : confirm_mode == "ANY" ? (ema_bias_ok_buy or trap_ok_buy or osc_ok_buy or rr_ok_buy) : confirms_buy >= confirm_min_passed
-bool confirm_ok_sell = confirm_mode == "ALL" ? (ema_bias_ok_sell and trap_ok_sell and osc_ok_sell and rr_ok_sell) : confirm_mode == "ANY" ? (ema_bias_ok_sell or trap_ok_sell or osc_ok_sell or rr_ok_sell) : confirms_sell >= confirm_min_passed
+float rr_buy = has_buy ? math.abs((buy_tp - buy_entry_plan) / math.max(buy_entry_plan - buy_stop, syminfo.mintick)) : na
+float rr_sell = has_sell ? math.abs((sell_entry_plan - sell_tp) / math.max(sell_stop - sell_entry_plan, syminfo.mintick)) : na
+bool rr_ok_buy = not use_rr_gate or (has_buy and rr_buy >= rr_min)
+bool rr_ok_sell = not use_rr_gate or (has_sell and rr_sell >= rr_min)
 
-bool ltf_trigger_buy = ta.crossover(close, ltf_trig_up)
-bool ltf_trigger_sell = ta.crossunder(close, ltf_trig_dn)
-bool entry_trigger_ok_buy = ltf_trigger_buy
-bool entry_trigger_ok_sell = ltf_trigger_sell
+float buy_trig_level = ltf_trig_up
+float sell_trig_level = ltf_trig_dn
+bool buy_level_changed = buy_trig_level != buy_trig_level[1]
+bool sell_level_changed = sell_trig_level != sell_trig_level[1]
+bool entry_trigger_ok_buy = has_buy and not buy_level_changed and ltf_close > buy_trig_level and ltf_close[1] <= buy_trig_level[1]
+bool entry_trigger_ok_sell = has_sell and not sell_level_changed and ltf_close < sell_trig_level and ltf_close[1] >= sell_trig_level[1]
+
+string block_reason_buy = ""
+string block_reason_sell = ""
+bool blocked_buy = false
+bool blocked_sell = false
+if has_buy and (not rr_ok_buy or not pp_ok_buy or not trap_ok_buy or not osc_ok_buy or not ltf_gate_ok_buy or not entry_trigger_ok_buy)
+    blocked_buy := true
+    block_reason_buy := (not rr_ok_buy ? "RR " : "") + (not pp_ok_buy ? "PP " : "") + (not trap_ok_buy ? "TRAP " : "") + (not osc_ok_buy ? "OSC " : "") + (not ltf_gate_ok_buy ? "LTF " : "") + (not entry_trigger_ok_buy ? "TRIG" : "")
+if has_sell and (not rr_ok_sell or not pp_ok_sell or not trap_ok_sell or not osc_ok_sell or not ltf_gate_ok_sell or not entry_trigger_ok_sell)
+    blocked_sell := true
+    block_reason_sell := (not rr_ok_sell ? "RR " : "") + (not pp_ok_sell ? "PP " : "") + (not trap_ok_sell ? "TRAP " : "") + (not osc_ok_sell ? "OSC " : "") + (not ltf_gate_ok_sell ? "LTF " : "") + (not entry_trigger_ok_sell ? "TRIG" : "")
 
 string stage_buy = STAGE_FAR
 string stage_sell = STAGE_FAR
-string block_reason_buy = ""
-string block_reason_sell = ""
 if has_buy
-    if buy_near
+    if not buy_near
+        stage_buy := STAGE_FAR
+    else if not buy_in_zone
         stage_buy := STAGE_NEAR
-    if buy_inside
+    else if not ltf_gate_ok_buy
         stage_buy := STAGE_IN_ZONE
-    if buy_inside and ltf_gate_ok_buy
+    else if not (pp_ok_buy and ema_bias_ok_buy and trap_ok_buy and osc_ok_buy and rr_ok_buy)
         stage_buy := STAGE_LTF_READY
-    if buy_inside and ltf_gate_ok_buy and confirm_ok_buy
+    else if not entry_trigger_ok_buy
         stage_buy := STAGE_CONFIRM_READY
-    if buy_inside and ltf_gate_ok_buy and confirm_ok_buy and entry_trigger_ok_buy
+    else
         stage_buy := STAGE_ENTRY
-    if buy_inside and (not ltf_gate_ok_buy or not confirm_ok_buy)
-        stage_buy := STAGE_BLOCKED
-        block_reason_buy := not ltf_gate_ok_buy ? "LTF gate" : "Confirm"
 if has_sell
-    if sell_near
+    if not sell_near
+        stage_sell := STAGE_FAR
+    else if not sell_in_zone
         stage_sell := STAGE_NEAR
-    if sell_inside
+    else if not ltf_gate_ok_sell
         stage_sell := STAGE_IN_ZONE
-    if sell_inside and ltf_gate_ok_sell
+    else if not (pp_ok_sell and ema_bias_ok_sell and trap_ok_sell and osc_ok_sell and rr_ok_sell)
         stage_sell := STAGE_LTF_READY
-    if sell_inside and ltf_gate_ok_sell and confirm_ok_sell
+    else if not entry_trigger_ok_sell
         stage_sell := STAGE_CONFIRM_READY
-    if sell_inside and ltf_gate_ok_sell and confirm_ok_sell and entry_trigger_ok_sell
+    else
         stage_sell := STAGE_ENTRY
-    if sell_inside and (not ltf_gate_ok_sell or not confirm_ok_sell)
-        stage_sell := STAGE_BLOCKED
-        block_reason_sell := not ltf_gate_ok_sell ? "LTF gate" : "Confirm"
 
-var string prev_stage_buy = ""
-var string prev_stage_sell = ""
+var string prev_stage_buy = STAGE_FAR
+var string prev_stage_sell = STAGE_FAR
+var bool prev_blocked_buy = false
+var bool prev_blocked_sell = false
+
 bool buy_stage_transition = stage_buy != prev_stage_buy
 bool sell_stage_transition = stage_sell != prev_stage_sell
-bool entry_buy_sig = buy_stage_transition and stage_buy == STAGE_ENTRY
-bool entry_sell_sig = sell_stage_transition and stage_sell == STAGE_ENTRY
-bool blocked_buy_edge = buy_stage_transition and stage_buy == STAGE_BLOCKED
-bool blocked_sell_edge = sell_stage_transition and stage_sell == STAGE_BLOCKED
+bool blocked_buy_edge = blocked_buy and not prev_blocked_buy
+bool blocked_sell_edge = blocked_sell and not prev_blocked_sell
+bool near_buy_edge = buy_stage_transition and stage_buy == STAGE_NEAR
+bool near_sell_edge = sell_stage_transition and stage_sell == STAGE_NEAR
+bool in_zone_buy_edge = buy_stage_transition and stage_buy == STAGE_IN_ZONE
+bool in_zone_sell_edge = sell_stage_transition and stage_sell == STAGE_IN_ZONE
+bool ltf_ready_buy_edge = buy_stage_transition and stage_buy == STAGE_LTF_READY
+bool ltf_ready_sell_edge = sell_stage_transition and stage_sell == STAGE_LTF_READY
 bool confirm_ready_buy_edge = buy_stage_transition and stage_buy == STAGE_CONFIRM_READY
 bool confirm_ready_sell_edge = sell_stage_transition and stage_sell == STAGE_CONFIRM_READY
+bool entry_buy_sig = buy_stage_transition and stage_buy == STAGE_ENTRY
+bool entry_sell_sig = sell_stage_transition and stage_sell == STAGE_ENTRY
 
-if show_labels and buy_near_edge
+if show_labels and near_buy_edge
     f_push_icon("⏳ BUY", color.new(color.green, 30), false)
-if show_labels and sell_near_edge
+if show_labels and near_sell_edge
     f_push_icon("⏳ SELL", color.new(color.red, 30), false)
-if show_labels and buy_in_zone_edge
+if show_labels and in_zone_buy_edge
     f_push_icon("⚡ BUY", color.new(color.green, 0), false)
-if show_labels and sell_in_zone_edge
+if show_labels and in_zone_sell_edge
     f_push_icon("⚡ SELL", color.new(color.red, 0), false)
 if show_labels and confirm_ready_buy_edge
     f_push_icon("✅ BUY", color.new(color.blue, 0), false)
@@ -563,10 +600,31 @@ if show_labels and blocked_buy_edge
 if show_labels and blocked_sell_edge
     f_push_icon("⛔ SELL " + block_reason_sell, color.new(color.maroon, 0), false)
 
-alertcondition(buy_near_edge, "near_buy", "Price NEAR BUY zone")
-alertcondition(sell_near_edge, "near_sell", "Price NEAR SELL zone")
-alertcondition(buy_in_zone_edge, "in_zone_buy", "Price entered BUY zone")
-alertcondition(sell_in_zone_edge, "in_zone_sell", "Price entered SELL zone")
+plot(show_rr_lines and has_buy ? buy_entry_plan : na, "BUY entry", color=color.new(color.lime, 0), linewidth=1, style=plot.style_linebr)
+plot(show_rr_lines and has_buy ? buy_stop : na, "BUY stop", color=color.new(color.red, 0), linewidth=1, style=plot.style_linebr)
+plot(show_rr_lines and has_buy ? buy_tp : na, "BUY tp", color=color.new(color.blue, 0), linewidth=1, style=plot.style_linebr)
+plot(show_rr_lines and has_sell ? sell_entry_plan : na, "SELL entry", color=color.new(color.orange, 0), linewidth=1, style=plot.style_linebr)
+plot(show_rr_lines and has_sell ? sell_stop : na, "SELL stop", color=color.new(color.maroon, 0), linewidth=1, style=plot.style_linebr)
+plot(show_rr_lines and has_sell ? sell_tp : na, "SELL tp", color=color.new(color.aqua, 0), linewidth=1, style=plot.style_linebr)
+
+var label active_buy_label = na
+var label active_sell_label = na
+if barstate.islast
+    if na(active_buy_label)
+        active_buy_label := label.new(time, high, "", xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.new(color.lime, 0), color=color.new(color.black, 80), size=size.tiny)
+    if na(active_sell_label)
+        active_sell_label := label.new(time, low, "", xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.new(color.red, 0), color=color.new(color.black, 80), size=size.tiny)
+    label.set_x(active_buy_label, time)
+    label.set_y(active_buy_label, high)
+    label.set_text(active_buy_label, has_buy ? "BUY: " + (stage_buy == STAGE_LTF_READY ? "READY" : stage_buy) : "BUY: n/a")
+    label.set_x(active_sell_label, time)
+    label.set_y(active_sell_label, low)
+    label.set_text(active_sell_label, has_sell ? "SELL: " + (stage_sell == STAGE_LTF_READY ? "READY" : stage_sell) : "SELL: n/a")
+
+alertcondition(near_buy_edge, "near_buy", "Price NEAR BUY zone")
+alertcondition(near_sell_edge, "near_sell", "Price NEAR SELL zone")
+alertcondition(in_zone_buy_edge, "in_zone_buy", "Price entered BUY zone")
+alertcondition(in_zone_sell_edge, "in_zone_sell", "Price entered SELL zone")
 alertcondition(ltf_ready_buy_edge, "ltf_ready_buy", "LTF gate ready for BUY")
 alertcondition(ltf_ready_sell_edge, "ltf_ready_sell", "LTF gate ready for SELL")
 alertcondition(confirm_ready_buy_edge, "confirm_ready_buy", "Confirm ready BUY")
@@ -582,43 +640,33 @@ alertcondition(zone_flipped, "zone_flipped", "HTF zone flipped")
 alertcondition(trap_buy_event, "trap_event_buy", "Trap event BUY")
 alertcondition(trap_sell_event, "trap_event_sell", "Trap event SELL")
 
-var table hud = table.new(position.top_right, 7, 4, bgcolor=color.new(color.black, 80))
+var table hud = table.new(position.top_right, 7, 5, bgcolor=color.new(color.black, 80))
 if barstate.islast and show_hud
     table.cell(hud, 0, 0, "SIDE", text_color=color.white)
     table.cell(hud, 1, 0, "ZONE", text_color=color.white)
-    table.cell(hud, 2, 0, "DIST", text_color=color.white)
-    table.cell(hud, 3, 0, "AGE/TCH", text_color=color.white)
-    table.cell(hud, 4, 0, "STATUS", text_color=color.white)
-    table.cell(hud, 5, 0, "MOD", text_color=color.white)
-    table.cell(hud, 6, 0, "TF", text_color=color.white)
-    string btxt = has_buy ? str.tostring(array.get(z_poc, buy_idx), format.mintick) + " [" + str.tostring(array.get(z_bot, buy_idx), format.mintick) + ";" + str.tostring(array.get(z_top, buy_idx), format.mintick) + "]" : "n/a"
-    string st_b = has_buy ? f_zone_status_text(array.get(z_status, buy_idx)) : "-"
-    string ageb = has_buy ? str.tostring(int((time - array.get(z_time, buy_idx)) / math.max(f_tf_ms(array.get(z_tf, buy_idx)), 1))) + "/" + str.tostring(array.get(z_touch, buy_idx)) : "-"
+    table.cell(hud, 2, 0, "STAGE", text_color=color.white)
+    table.cell(hud, 3, 0, "BLOCK", text_color=color.white)
+    table.cell(hud, 4, 0, "RR/PP", text_color=color.white)
+    table.cell(hud, 5, 0, "TF", text_color=color.white)
+    table.cell(hud, 6, 0, "LEGEND", text_color=color.white)
     table.cell(hud, 0, 1, "BUY", text_color=color.lime)
-    table.cell(hud, 1, 1, btxt, text_color=color.white)
-    table.cell(hud, 2, 1, has_buy ? str.tostring(buy_dist, format.mintick) : "-", text_color=color.white)
-    table.cell(hud, 3, 1, ageb, text_color=color.white)
-    table.cell(hud, 4, 1, st_b, text_color=color.white)
-    table.cell(hud, 5, 1, "RR:" + (rr_ok_buy ? "OK" : "BAD") + " EMA:" + (ema_bias_ok_buy ? "OK" : "WAI") + " TR:" + (trap_ok_buy ? "OK" : "WAI") + " OSC:" + (osc_ok_buy ? "OK" : "BAD") + " LTF:" + (ltf_gate_ok_buy ? "OK" : "WAI") + " TG:" + (entry_trigger_ok_buy ? "OK" : "WAI") + " ST:" + stage_buy, text_color=color.silver)
-    table.cell(hud, 6, 1, has_buy ? array.get(z_tf, buy_idx) : "-", text_color=color.white)
-    string stxt = has_sell ? str.tostring(array.get(z_poc, sell_idx), format.mintick) + " [" + str.tostring(array.get(z_bot, sell_idx), format.mintick) + ";" + str.tostring(array.get(z_top, sell_idx), format.mintick) + "]" : "n/a"
-    string st_s = has_sell ? f_zone_status_text(array.get(z_status, sell_idx)) : "-"
-    string ages = has_sell ? str.tostring(int((time - array.get(z_time, sell_idx)) / math.max(f_tf_ms(array.get(z_tf, sell_idx)), 1))) + "/" + str.tostring(array.get(z_touch, sell_idx)) : "-"
+    table.cell(hud, 1, 1, has_buy ? str.tostring(buy_poc, format.mintick) : "n/a", text_color=color.white)
+    table.cell(hud, 2, 1, stage_buy, text_color=color.white)
+    table.cell(hud, 3, 1, blocked_buy ? block_reason_buy : "-", text_color=blocked_buy ? color.orange : color.silver)
+    table.cell(hud, 4, 1, "RR:" + (rr_ok_buy ? "OK" : "BAD") + " PP:" + pp_state_buy, text_color=color.silver)
+    table.cell(hud, 5, 1, has_buy ? array.get(z_tf, buy_idx) : "-", text_color=color.white)
     table.cell(hud, 0, 2, "SELL", text_color=color.red)
-    table.cell(hud, 1, 2, stxt, text_color=color.white)
-    table.cell(hud, 2, 2, has_sell ? str.tostring(sell_dist, format.mintick) : "-", text_color=color.white)
-    table.cell(hud, 3, 2, ages, text_color=color.white)
-    table.cell(hud, 4, 2, st_s, text_color=color.white)
-    table.cell(hud, 5, 2, "RR:" + (rr_ok_sell ? "OK" : "BAD") + " EMA:" + (ema_bias_ok_sell ? "OK" : "WAI") + " TR:" + (trap_ok_sell ? "OK" : "WAI") + " OSC:" + (osc_ok_sell ? "OK" : "BAD") + " LTF:" + (ltf_gate_ok_sell ? "OK" : "WAI") + " TG:" + (entry_trigger_ok_sell ? "OK" : "WAI") + " ST:" + stage_sell, text_color=color.silver)
-    table.cell(hud, 6, 2, has_sell ? array.get(z_tf, sell_idx) : "-", text_color=color.white)
+    table.cell(hud, 1, 2, has_sell ? str.tostring(sell_poc, format.mintick) : "n/a", text_color=color.white)
+    table.cell(hud, 2, 2, stage_sell, text_color=color.white)
+    table.cell(hud, 3, 2, blocked_sell ? block_reason_sell : "-", text_color=blocked_sell ? color.orange : color.silver)
+    table.cell(hud, 4, 2, "RR:" + (rr_ok_sell ? "OK" : "BAD") + " PP:" + pp_state_sell, text_color=color.silver)
+    table.cell(hud, 5, 2, has_sell ? array.get(z_tf, sell_idx) : "-", text_color=color.white)
     table.cell(hud, 0, 3, "TF", text_color=color.white)
     table.cell(hud, 1, 3, htf1 + "/" + htf2 + "/" + ltf, text_color=color.silver)
+    table.cell(hud, 0, 4, "Legend", text_color=color.white)
+    table.cell(hud, 1, 4, "⏳ near ⚡ zone ✅ confirm ▲▼ entry ⛔ blocked", text_color=color.silver)
 
 prev_stage_buy := stage_buy
 prev_stage_sell := stage_sell
-prev_buy_inside := buy_inside
-prev_sell_inside := sell_inside
-prev_buy_near := buy_near
-prev_sell_near := sell_near
-prev_buy_zone_id := buy_zone_id
-prev_sell_zone_id := sell_zone_id
+prev_blocked_buy := blocked_buy
+prev_blocked_sell := blocked_sell
