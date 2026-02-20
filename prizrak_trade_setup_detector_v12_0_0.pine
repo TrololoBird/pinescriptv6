@@ -77,6 +77,7 @@ int BASE_BUILD = 1
 int BASE_VALID = 2
 int BASE_BREAK_UP = 3
 int BASE_BREAK_DN = 4
+int MAX_CLEANUP_ITERATIONS = 16
 
 f_tf_ms(string _tf) => int(timeframe.in_seconds(_tf) * 1000)
 f_clamp(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
@@ -94,6 +95,11 @@ string pp_tf_eff = str.length(pp_tf) > 0 ? pp_tf : ltf
 f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, float _max_range_atr, int _exit_confirm, int _bins, int _base_max_bars) =>
     float atr = ta.atr(14)
     float vol_ma = ta.sma(volume, 20)
+    var float[] bins = array.new_float(0)
+    if array.size(bins) != _bins
+        array.clear(bins)
+        for bi = 0 to _bins - 1
+            array.push(bins, 0.0)
     var int st = BASE_SEEK
     var float base_hi = na
     var float base_lo = na
@@ -170,9 +176,6 @@ f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, floa
                 int bars_cap = math.max(math.min(base_bars, _base_max_bars), 1)
                 int break_span = math.max(out_up, out_dn)
                 float den = math.max(b_hi - b_lo, syminfo.mintick)
-                var float[] bins = array.new_float(_bins, 0.0)
-                if array.size(bins) != _bins
-                    bins := array.new_float(_bins, 0.0)
                 for bi = 0 to _bins - 1
                     array.set(bins, bi, 0.0)
                 for j = 0 to bars_cap - 1
@@ -495,8 +498,10 @@ for i = array.size(z_id) - 1 to 0
         if not na(lb)
             label.set_text(lb, (typ == 1 ? "BUY " : "SELL ") + tfz + " T:" + str.tostring(array.get(z_touch, i)))
 
-while array.size(z_id) > max_zones_per_tf * 4
+int cleanup_iterations = 0
+while array.size(z_id) > max_zones_per_tf * 4 and cleanup_iterations < MAX_CLEANUP_ITERATIONS
     f_remove_zone(0)
+    cleanup_iterations += 1
 
 f_enforce_tf_side_limit(1, htf1)
 f_enforce_tf_side_limit(1, htf2)
