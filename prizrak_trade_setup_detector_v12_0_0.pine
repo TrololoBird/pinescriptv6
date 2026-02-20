@@ -53,6 +53,10 @@ trap_max_bars = input.int(6, "Trap max bars (zone TF)", minval=1, maxval=20, gro
 trap_use_volume_gate = input.bool(false, "Trap volume gate (zone TF volume)", group="Trap")
 trap_return_volume_mult = input.float(1.1, "Trap return volume mult", minval=0.5, step=0.1, group="Trap")
 
+stopvol_enabled = input.bool(true, "Enable stop-volume origin", group="Stop Volume")
+stopvol_range_atr_mult = input.float(1.25, "Stop-volume range <= ATR *", minval=0.2, step=0.05, group="Stop Volume")
+stopvol_vol_mult = input.float(1.5, "Stop-volume vol >= MA *", minval=0.5, step=0.1, group="Stop Volume")
+
 show_hud = input.bool(true, "Show HUD", group="Visual")
 show_labels = input.bool(true, "Show stage icons", group="Visual")
 show_rr_lines = input.bool(true, "Show entry/stop/tp lines", group="Visual")
@@ -299,6 +303,7 @@ var int[] z_last_tf_time = array.new_int()
 var float[] z_base_hi = array.new_float()
 var float[] z_base_lo = array.new_float()
 var int[] z_break_time = array.new_int()
+var string[] z_origin = array.new_string()
 var box[] z_box = array.new_box()
 var label[] z_label = array.new_label()
 var int zid_seq = 0
@@ -320,15 +325,16 @@ f_push_icon(string _txt, color _bg, bool _up) =>
         if not na(old)
             label.delete(old)
 
-f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi, float _blo) =>
+f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi, float _blo, string _origin) =>
     zid_seq += 1
     float pad = _atr * htf_poc_pad_mult
     float top = _poc + pad
     float bot = _poc - pad
-    color col = _type == 1 ? color.green : color.red
+    bool is_stopvol = _origin == "STOPVOL"
+    color col = _type == 1 ? (is_stopvol ? color.teal : color.green) : (is_stopvol ? color.purple : color.red)
     int opa = _tf == htf1 ? 82 : 90
-    box b = box.new(_t, top, time + f_tf_ms(_tf) * zone_extend_bars, bot, xloc=xloc.bar_time, bgcolor=color.new(col, opa), border_color=color.new(col, 0), border_width=1)
-    label lb = label.new(_t, _type == 1 ? bot : top, (_type == 1 ? "BUY" : "SELL") + " POC (" + _tf + ")", xloc=xloc.bar_time, textcolor=color.white, color=color.new(col, 20), size=size.tiny, style=label.style_label_left)
+    box b = box.new(_t, top, time + f_tf_ms(_tf) * zone_extend_bars, bot, xloc=xloc.bar_time, bgcolor=color.new(col, opa), border_color=color.new(col, 0), border_width=is_stopvol ? 2 : 1)
+    label lb = label.new(_t, _type == 1 ? bot : top, (_type == 1 ? "BUY" : "SELL") + " POC (" + _tf + ") [" + _origin + "]", xloc=xloc.bar_time, textcolor=color.white, color=color.new(col, 20), size=size.tiny, style=label.style_label_left)
     array.push(z_id, zid_seq)
     array.push(z_type, _type)
     array.push(z_status, Z_ACTIVE)
@@ -345,6 +351,7 @@ f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi,
     array.push(z_base_hi, _bhi)
     array.push(z_base_lo, _blo)
     array.push(z_break_time, na)
+    array.push(z_origin, _origin)
     array.push(z_box, b)
     array.push(z_label, lb)
 
@@ -371,6 +378,7 @@ f_remove_zone(int i) =>
     array.remove(z_base_hi, i)
     array.remove(z_base_lo, i)
     array.remove(z_break_time, i)
+    array.remove(z_origin, i)
     array.remove(z_box, i)
     array.remove(z_label, i)
 
@@ -420,17 +428,20 @@ bool zone_invalidated = false
 bool zone_consumed = false
 bool zone_flipped = false
 
+bool htf1_stopvol = stopvol_enabled and not na(htf1_bh) and not na(htf1_bl) and not na(htf1_atr) and not na(htf1_vol_ma) and (htf1_bh - htf1_bl) <= htf1_atr * stopvol_range_atr_mult and htf1_vol >= htf1_vol_ma * stopvol_vol_mult
+bool htf2_stopvol = stopvol_enabled and not na(htf2_bh) and not na(htf2_bl) and not na(htf2_atr) and not na(htf2_vol_ma) and (htf2_bh - htf2_bl) <= htf2_atr * stopvol_range_atr_mult and htf2_vol >= htf2_vol_ma * stopvol_vol_mult
+
 if htf1_edge_up > 0 and htf1_edge_up[1] <= 0 and not na(htf1_poc)
-    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl)
+    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, htf1_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 if htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0 and not na(htf1_poc)
-    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl)
+    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, htf1_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 if htf2_edge_up > 0 and htf2_edge_up[1] <= 0 and not na(htf2_poc)
-    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl)
+    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, htf2_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 if htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0 and not na(htf2_poc)
-    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl)
+    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, htf2_stopvol ? "STOPVOL" : "BASE")
     zone_created := true
 
 for i = array.size(z_id) - 1 to 0
@@ -627,8 +638,14 @@ bool trap_buy_event = has_buy and low < buy_bot and close >= buy_bot
 bool trap_sell_event = has_sell and high > sell_top and close <= sell_top
 bool trap_type2_buy = has_buy and close > buy_top and ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars) <= ltf_atr
 bool trap_type2_sell = has_sell and close < sell_bot and ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars) <= ltf_atr
-bool trap_vol_ok_buy = not trap_use_volume_gate or (htf1_vol >= htf1_vol_ma * trap_return_volume_mult) or (htf2_vol >= htf2_vol_ma * trap_return_volume_mult)
-bool trap_vol_ok_sell = not trap_use_volume_gate or (htf1_vol >= htf1_vol_ma * trap_return_volume_mult) or (htf2_vol >= htf2_vol_ma * trap_return_volume_mult)
+string buy_tf = has_buy ? array.get(z_tf, buy_idx) : ""
+string sell_tf = has_sell ? array.get(z_tf, sell_idx) : ""
+float buy_tf_vol = buy_tf == htf1 ? htf1_vol : buy_tf == htf2 ? htf2_vol : na
+float buy_tf_vol_ma = buy_tf == htf1 ? htf1_vol_ma : buy_tf == htf2 ? htf2_vol_ma : na
+float sell_tf_vol = sell_tf == htf1 ? htf1_vol : sell_tf == htf2 ? htf2_vol : na
+float sell_tf_vol_ma = sell_tf == htf1 ? htf1_vol_ma : sell_tf == htf2 ? htf2_vol_ma : na
+bool trap_vol_ok_buy = not trap_use_volume_gate or (has_buy and not na(buy_tf_vol) and not na(buy_tf_vol_ma) and buy_tf_vol >= buy_tf_vol_ma * trap_return_volume_mult)
+bool trap_vol_ok_sell = not trap_use_volume_gate or (has_sell and not na(sell_tf_vol) and not na(sell_tf_vol_ma) and sell_tf_vol >= sell_tf_vol_ma * trap_return_volume_mult)
 bool trap_ok_buy = not use_trap_confirm or ((trap_buy_event or trap_type2_buy) and trap_vol_ok_buy)
 bool trap_ok_sell = not use_trap_confirm or ((trap_sell_event or trap_type2_sell) and trap_vol_ok_sell)
 
@@ -638,11 +655,21 @@ float buy_stop = has_buy ? array.get(z_base_lo, buy_idx) - math.max(array.get(z_
 float sell_stop = has_sell ? array.get(z_base_hi, sell_idx) + math.max(array.get(z_base_hi, sell_idx) * stop_pad_pct * 0.01, sell_atr * stop_pad_atr_mult) : na
 float buy_tp = has_buy ? buy_entry_plan + rr_fallback_atr * buy_atr : na
 float sell_tp = has_sell ? sell_entry_plan - rr_fallback_atr * sell_atr : na
+float best_buy_tp_dist = na
+float best_sell_tp_dist = na
 for i = 0 to array.size(z_id) - 1
     if has_buy and array.get(z_type, i) == -1 and array.get(z_status, i) <= Z_TOUCHED and array.get(z_tf, i) == array.get(z_tf, buy_idx)
-        buy_tp := array.get(z_poc, i)
+        float cand_buy_tp = array.get(z_poc, i)
+        float cand_buy_dist = cand_buy_tp - buy_entry_plan
+        if cand_buy_dist > EPS and (na(best_buy_tp_dist) or cand_buy_dist < best_buy_tp_dist)
+            best_buy_tp_dist := cand_buy_dist
+            buy_tp := cand_buy_tp
     if has_sell and array.get(z_type, i) == 1 and array.get(z_status, i) <= Z_TOUCHED and array.get(z_tf, i) == array.get(z_tf, sell_idx)
-        sell_tp := array.get(z_poc, i)
+        float cand_sell_tp = array.get(z_poc, i)
+        float cand_sell_dist = sell_entry_plan - cand_sell_tp
+        if cand_sell_dist > EPS and (na(best_sell_tp_dist) or cand_sell_dist < best_sell_tp_dist)
+            best_sell_tp_dist := cand_sell_dist
+            sell_tp := cand_sell_tp
 
 float rr_buy = has_buy ? math.abs((buy_tp - buy_entry_plan) / math.max(buy_entry_plan - buy_stop, syminfo.mintick)) : na
 float rr_sell = has_sell ? math.abs((sell_entry_plan - sell_tp) / math.max(sell_stop - sell_entry_plan, syminfo.mintick)) : na
@@ -653,8 +680,8 @@ float buy_trig_level = entry_plan_mode == "ZONE_EDGE" ? buy_top : math.max(ltf_t
 float sell_trig_level = entry_plan_mode == "ZONE_EDGE" ? sell_bot : math.min(ltf_trig_dn, sell_entry_plan)
 bool buy_level_changed = has_buy and not na(buy_trig_level) and not na(buy_trig_level[1]) and math.abs(buy_trig_level - buy_trig_level[1]) > EPS
 bool sell_level_changed = has_sell and not na(sell_trig_level) and not na(sell_trig_level[1]) and math.abs(sell_trig_level - sell_trig_level[1]) > EPS
-bool entry_trigger_ok_buy = has_buy and not na(ltf_close) and not na(ltf_close[1]) and not na(buy_trig_level) and not na(buy_trig_level[1]) and ltf_close > buy_trig_level + EPS and ltf_close[1] <= buy_trig_level[1] + EPS
-bool entry_trigger_ok_sell = has_sell and not na(ltf_close) and not na(ltf_close[1]) and not na(sell_trig_level) and not na(sell_trig_level[1]) and ltf_close < sell_trig_level - EPS and ltf_close[1] >= sell_trig_level[1] - EPS
+bool entry_trigger_ok_buy = has_buy and not buy_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(buy_trig_level) and not na(buy_trig_level[1]) and ltf_close > buy_trig_level + EPS and ltf_close[1] <= buy_trig_level[1] + EPS
+bool entry_trigger_ok_sell = has_sell and not sell_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(sell_trig_level) and not na(sell_trig_level[1]) and ltf_close < sell_trig_level - EPS and ltf_close[1] >= sell_trig_level[1] - EPS
 
 bool all_filters_ok_buy = rr_ok_buy and pp_ok_buy and trap_ok_buy and osc_ok_buy and ema_bias_ok_buy
 bool all_filters_ok_sell = rr_ok_sell and pp_ok_sell and trap_ok_sell and osc_ok_sell and ema_bias_ok_sell
