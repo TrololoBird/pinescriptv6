@@ -259,3 +259,36 @@
   - reward targets nearest opposite active zone on same TF, fallback to ATR-based target.
 - Added bounded icon history with `icon_keep` and label pruning to avoid object-limit pressure.
 - Contract intentionally updated for new/renamed inputs; lock refreshed.
+
+## 2026-02-20 — v12.2.0 product hardening (PDF flow, no strict-compat)
+
+- BUY/SELL execution path fully split end-to-end:
+  - independent side contexts (`buy_inside/buy_near` vs `sell_inside/sell_near`),
+  - independent stage machines (`stage_buy`, `stage_sell`),
+  - side-specific edge resets on zone switch (`prev_buy_zone_id`, `prev_sell_zone_id`),
+  - side-specific module gates in HUD/alerts (`ltf_gate_ok_buy/sell`, `entry_trigger_ok_buy/sell`, etc).
+- HTF engine rewritten as state machine with persistent counters:
+  - states `BASE_OFF/BASE_ON/POST_BASE`,
+  - persistent `out_cnt_up/out_cnt_dn` confirmation counters,
+  - breakout edge emission only after `_exit_confirm` bars outside base,
+  - rollback to `BASE_ON` when price returns into base.
+- HTF POC upgraded to true volume-profile binning on breakout edge only:
+  - `array.new_float(_bins)` accumulation over capped base history,
+  - bin max selection (`max_idx`) for POC extraction,
+  - added `htf_poc_price_mode` = `HLC3|VWAP|CLOSE` and `base_max_bars` cap.
+- LTF POC upgraded to volume-profile bins (removed pseudo-VWAP fallback):
+  - `ltf_poc_bins` histogram, max-volume bin selection, and POC±ATR pad entry zone.
+- Invalidation confirmation pinned to zone timeframe bars:
+  - `z_inv_cnt` increments only on new zone-TF candle (`z_last_tf_time` delta),
+  - confirmation checks use zone bounds plus `invalidate_pad_atr`.
+- Trap logic reworked to anchored model:
+  - break level/time/zone state captured at confirmed invalidation,
+  - trap-return requires crossing back over anchored level within `trap_max_bars` (zone TF bars),
+  - optional volume gate on return (`trap_use_volume_gate`, `trap_return_volume_mult`).
+- RR model aligned to base structure:
+  - `buy_stop = base_lo - pad`, `sell_stop = base_hi + pad` (ATR/% pad),
+  - reward target = nearest opposite active zone on same TF, fallback ATR*2,
+  - RR valid only for positive/non-NA risk & reward.
+- Visual/runtime:
+  - zone extension made configurable via `zone_extend_bars` (replacing fixed 400),
+  - stage icons preserved with `icon_keep` pruning budget.
