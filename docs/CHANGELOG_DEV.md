@@ -353,3 +353,15 @@ Verification run:
   - При подходе к зоне появляется `⏳`, при overlap в зону — `⚡`, после прохождения фильтров — `✅`, затем на реальном trigger событии — `▲/▼ ENTRY`.
   - Wick-touch увеличивает touches только на входе в overlap (без спама каждый бар внутри).
   - После break+retest flip-зона имеет корректную HTF привязку по времени (возраст/extend/окна не «ломаются»).
+
+## 2026-02-20 — P0 fixes: HTF breakout + blocked semantics + HTF volume MA
+
+- Fixed HTF breakout detection in `f_htf_pack()` to use frozen base edges (`prev_hi/prev_lo`) before any current-bar expansion.
+- Prevented breakout bars from expanding base geometry and from polluting base POC sample; breakout confirmation now uses edge counters on frozen edges.
+- Switched base touches to wick-based edge detection (`high/low` against tolerated edges) with edge-triggered counting.
+- Added HTF debug outputs in Data Window: `DBG htf1_edge_up/dn`, `DBG htf2_edge_up/dn` for manual TV verification that breakout edges fire.
+- Reworked BLOCKED semantics:
+  - `blocked_filters_*` now triggers only inside zone + LTF gate ready + failing filters (RR/PP/TRAP/OSC/EMA),
+  - `wait_trig_*` is now separate when filters pass but entry trigger is still pending,
+  - blocked edge icons/alerts now fire only for real in-zone filter blocks.
+- Fixed Trap volume gate TF consistency by computing `vol_ma=ta.sma(volume,20)` inside HTF `request.security` pack and gating against returned HTF MA values.

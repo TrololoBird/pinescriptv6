@@ -272,3 +272,13 @@
     - `price_in_ltf_sell_zone`
 - Visual rank clarity:
   - Verify HTF1 zones are visually stronger than HTF2 and both are distinct from fallback/other TF zones.
+
+## 2026-02-20 — P0/P1 verification checklist (HTF breakout + BLOCKED semantics)
+
+- [ ] BTCUSDT 15m/1h/4h: in Data Window `DBG htf1_edge_up/dn` and `DBG htf2_edge_up/dn` are not permanently zero; values reach `1` on valid HTF breakouts.
+- [ ] New HTF zones appear after real breakout confirmations (no long freeze with only historical zones).
+- [ ] Stage flow is sequential and human-readable: `FAR/NEAR -> IN_ZONE -> ✅ CONFIRM_READY -> ENTRY` when trigger crosses.
+- [ ] `⛔ BLOCKED` appears only when price is in zone and LTF gate is already valid, but confirm filters fail.
+- [ ] `WAIT TRIG` appears when filters are all OK in-zone but entry trigger has not crossed yet.
+- [ ] `blocked_*` icons/alerts do not fire while price is FAR/NEAR or before in-zone gating.
+- [ ] Trap volume gate behavior is stable across chart TF changes (uses HTF volume MA from HTF context).
