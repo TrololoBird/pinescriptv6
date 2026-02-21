@@ -53,8 +53,8 @@ pp_confirm_closes = input.int(2, "PP confirm closes", minval=2, maxval=3, group=
 pp_retest_window = input.int(8, "PP retest window", minval=2, maxval=30, group="Confirm • PP")
 
 trap_max_bars = input.int(6, "Trap max bars", minval=1, maxval=20, group="Trap")
-trap_use_volume_gate = input.bool(false, "Trap volume gate (zone TF volume)", group="Trap")
-trap_return_volume_mult = input.float(1.1, "Trap return volume mult", minval=0.5, step=0.1, group="Trap")
+trap_use_volume_gate = input.bool(false, "Trap return volume gate (zone TF volume)", group="Trap")
+trap_return_volume_mult = input.float(1.1, "Trap return vol <= MA *", minval=0.5, step=0.1, group="Trap")
 
 stopvol_enabled = input.bool(true, "Enable stop-volume origin", group="Stop Volume")
 stopvol_len = input.int(6, "Stop-volume compression length", minval=3, maxval=60, group="Stop Volume")
@@ -396,7 +396,8 @@ bool ui_full = ui_mode == "FULL"
 bool ui_debug = ui_mode == "DEBUG"
 bool draw_last_only = render_mode == "LAST_BAR_ONLY"
 bool draw_now = not draw_last_only or barstate.islast
-bool show_labels_eff = show_labels and not ui_clean
+bool icons_budget_disabled = allowed_icons == 0
+bool show_labels_eff = show_labels and not ui_clean and not icons_budget_disabled
 bool show_rr_lines_eff = show_rr_lines and (ui_full or ui_debug)
 bool show_consumed_eff = show_consumed_history and (ui_full or ui_debug)
 
@@ -404,6 +405,12 @@ f_push_icon(string _txt, color _bg, bool _up) =>
     label ic = label.new(time, close, _txt, xloc=xloc.bar_time, style=_up ? label.style_label_up : label.style_label_down, color=_bg, textcolor=color.white, size=size.tiny)
     array.push(event_icons, ic)
     while array.size(event_icons) > icon_keep_eff
+        label old = array.shift(event_icons)
+        if not na(old)
+            label.delete(old)
+
+f_clear_icons() =>
+    while array.size(event_icons) > 0
         label old = array.shift(event_icons)
         if not na(old)
             label.delete(old)
@@ -622,7 +629,7 @@ for i = array.size(z_id) - 1 to 0
     else
         box bx = array.get(z_box, i)
         label lb = array.get(z_label, i)
-        if not na(bx)
+        if not na(bx) and draw_now
             box.set_right(bx, time + f_tf_ms(tfz) * zone_extend_bars)
 
 int cleanup_iterations = 0
@@ -768,8 +775,8 @@ float buy_tf_vol = buy_tf == htf1 ? htf1_vol : buy_tf == htf2 ? htf2_vol : na
 float buy_tf_vol_ma = buy_tf == htf1 ? htf1_vol_ma : buy_tf == htf2 ? htf2_vol_ma : na
 float sell_tf_vol = sell_tf == htf1 ? htf1_vol : sell_tf == htf2 ? htf2_vol : na
 float sell_tf_vol_ma = sell_tf == htf1 ? htf1_vol_ma : sell_tf == htf2 ? htf2_vol_ma : na
-bool trap_vol_ok_buy = not trap_use_volume_gate or (has_buy and not na(buy_tf_vol) and not na(buy_tf_vol_ma) and buy_tf_vol >= buy_tf_vol_ma * trap_return_volume_mult)
-bool trap_vol_ok_sell = not trap_use_volume_gate or (has_sell and not na(sell_tf_vol) and not na(sell_tf_vol_ma) and sell_tf_vol >= sell_tf_vol_ma * trap_return_volume_mult)
+bool trap_vol_ok_buy = not trap_use_volume_gate or (has_buy and not na(buy_tf_vol) and not na(buy_tf_vol_ma) and buy_tf_vol <= buy_tf_vol_ma * trap_return_volume_mult)
+bool trap_vol_ok_sell = not trap_use_volume_gate or (has_sell and not na(sell_tf_vol) and not na(sell_tf_vol_ma) and sell_tf_vol <= sell_tf_vol_ma * trap_return_volume_mult)
 bool trap_ok_buy = not use_trap_confirm or ((trap_buy_event or trap_type2_buy) and trap_vol_ok_buy)
 bool trap_ok_sell = not use_trap_confirm or ((trap_sell_event or trap_type2_sell) and trap_vol_ok_sell)
 
@@ -839,10 +846,14 @@ bool trig_valid_buy = trigger_mode == "LEGACY_MAX" ? has_buy and not na(buy_trig
 bool trig_valid_sell = trigger_mode == "LEGACY_MAX" ? has_sell and not na(sell_trig_level_legacy) : has_sell and not na(sell_trig_level_strict) and not na(sell_entry_plan) and sell_trig_level_strict < sell_entry_plan - EPS
 float buy_trig_level = trigger_mode == "LEGACY_MAX" ? buy_trig_level_legacy : (trig_valid_buy ? buy_trig_level_strict : na)
 float sell_trig_level = trigger_mode == "LEGACY_MAX" ? sell_trig_level_legacy : (trig_valid_sell ? sell_trig_level_strict : na)
+bool buy_level_stable_strict = trigger_mode != "STRICT_SWING" or (has_buy and not na(ltf_trig_up) and not na(ltf_trig_up[1]) and math.abs(ltf_trig_up - ltf_trig_up[1]) <= EPS)
+bool sell_level_stable_strict = trigger_mode != "STRICT_SWING" or (has_sell and not na(ltf_trig_dn) and not na(ltf_trig_dn[1]) and math.abs(ltf_trig_dn - ltf_trig_dn[1]) <= EPS)
 bool buy_level_changed = trigger_mode == "LEGACY_MAX" and has_buy and not na(buy_trig_level) and not na(buy_trig_level[1]) and math.abs(buy_trig_level - buy_trig_level[1]) > EPS
 bool sell_level_changed = trigger_mode == "LEGACY_MAX" and has_sell and not na(sell_trig_level) and not na(sell_trig_level[1]) and math.abs(sell_trig_level - sell_trig_level[1]) > EPS
-bool entry_trigger_ok_buy = trig_valid_buy and not buy_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(buy_trig_level) and not na(buy_trig_level[1]) and ltf_close > buy_trig_level + EPS and ltf_close[1] <= buy_trig_level[1] + EPS
-bool entry_trigger_ok_sell = trig_valid_sell and not sell_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(sell_trig_level) and not na(sell_trig_level[1]) and ltf_close < sell_trig_level - EPS and ltf_close[1] >= sell_trig_level[1] - EPS
+bool entry_trigger_ok_buy = trig_valid_buy and buy_level_stable_strict and not buy_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(buy_trig_level) and not na(buy_trig_level[1]) and ltf_close > buy_trig_level + EPS and ltf_close[1] <= buy_trig_level[1] + EPS
+bool entry_trigger_ok_sell = trig_valid_sell and sell_level_stable_strict and not sell_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(sell_trig_level) and not na(sell_trig_level[1]) and ltf_close < sell_trig_level - EPS and ltf_close[1] >= sell_trig_level[1] - EPS
+bool trig_shift_buy = trig_valid_buy and not buy_level_stable_strict
+bool trig_shift_sell = trig_valid_sell and not sell_level_stable_strict
 
 bool all_filters_ok_buy = rr_ok_buy and pp_ok_buy and trap_ok_buy and osc_ok_buy and ema_bias_ok_buy
 bool all_filters_ok_sell = rr_ok_sell and pp_ok_sell and trap_ok_sell and osc_ok_sell and ema_bias_ok_sell
@@ -925,6 +936,14 @@ if show_labels_eff and blocked_buy_edge
 if show_labels_eff and blocked_sell_edge
     f_push_icon("⛔ SELL " + block_reason_sell, color.new(color.maroon, 0), false)
 
+if ui_clean or not show_labels_eff
+    f_clear_icons()
+else
+    while array.size(event_icons) > icon_keep_eff
+        label old = array.shift(event_icons)
+        if not na(old)
+            label.delete(old)
+
 if draw_now
     for i = 0 to array.size(z_id) - 1
         box bx = array.get(z_box, i)
@@ -994,20 +1013,20 @@ if barstate.islast and show_hud
     table.cell(hud, 0, 1, "BUY", text_color=color.lime)
     table.cell(hud, 1, 1, has_buy ? str.tostring(buy_poc, format.mintick) : "n/a", text_color=color.white)
     table.cell(hud, 2, 1, stage_buy == STAGE_NEAR ? "⏳ NEAR" : stage_buy == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_buy == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_buy == STAGE_ENTRY ? "▲ ENTRY" : stage_buy, text_color=color.white)
-    table.cell(hud, 3, 1, blocked_filters_buy ? "⛔ " + block_reason_buy : (wait_trig_buy ? (trig_valid_buy ? "WAIT TRIG" : "TRIG BAD") : (has_buy and not buy_near ? "FAR" : has_buy and not buy_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_buy ? color.orange : color.silver)
+    table.cell(hud, 3, 1, blocked_filters_buy ? "⛔ " + block_reason_buy : (wait_trig_buy ? (trig_shift_buy ? "TRIG SHIFT" : trig_valid_buy ? "WAIT TRIG" : "TRIG BAD") : (has_buy and not buy_near ? "FAR" : has_buy and not buy_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_buy ? color.orange : color.silver)
     table.cell(hud, 4, 1, "TRIG:" + (trig_valid_buy ? "OK" : "BAD") + " RR:" + (has_buy and not na(rr_buy) ? str.tostring(rr_buy, format.mintick) : "n/a") + " PP:" + pp_state_buy + " T/O/L:" + (trap_ok_buy ? "OK" : "BAD") + "/" + (osc_ok_buy ? "OK" : "BAD") + "/" + (ltf_gate_ok_buy ? "OK" : "BAD"), text_color=color.silver)
     table.cell(hud, 5, 1, has_buy ? array.get(z_tf, buy_idx) + "/" + buy_origin : "-", text_color=color.white)
     table.cell(hud, 0, 2, "SELL", text_color=color.red)
     table.cell(hud, 1, 2, has_sell ? str.tostring(sell_poc, format.mintick) : "n/a", text_color=color.white)
     table.cell(hud, 2, 2, stage_sell == STAGE_NEAR ? "⏳ NEAR" : stage_sell == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_sell == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_sell == STAGE_ENTRY ? "▼ ENTRY" : stage_sell, text_color=color.white)
-    table.cell(hud, 3, 2, blocked_filters_sell ? "⛔ " + block_reason_sell : (wait_trig_sell ? (trig_valid_sell ? "WAIT TRIG" : "TRIG BAD") : (has_sell and not sell_near ? "FAR" : has_sell and not sell_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_sell ? color.orange : color.silver)
+    table.cell(hud, 3, 2, blocked_filters_sell ? "⛔ " + block_reason_sell : (wait_trig_sell ? (trig_shift_sell ? "TRIG SHIFT" : trig_valid_sell ? "WAIT TRIG" : "TRIG BAD") : (has_sell and not sell_near ? "FAR" : has_sell and not sell_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_sell ? color.orange : color.silver)
     table.cell(hud, 4, 2, "TRIG:" + (trig_valid_sell ? "OK" : "BAD") + " RR:" + (has_sell and not na(rr_sell) ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD"), text_color=color.silver)
     table.cell(hud, 5, 2, has_sell ? array.get(z_tf, sell_idx) + "/" + sell_origin : "-", text_color=color.white)
     table.cell(hud, 0, 3, "TF", text_color=color.white)
     table.cell(hud, 1, 3, htf1 + "/" + htf2 + "/" + ltf + " ui:" + ui_mode, text_color=color.silver)
     table.cell(hud, 0, 4, ui_clean ? "Mode" : "Legend", text_color=color.white)
     table.cell(hud, 1, 4, ui_clean ? "CLEAN" : "⏳ near ⚡ zone ✅ confirm ▲▼ entry ⛔ blocked", text_color=color.silver)
-    table.cell(hud, 2, 4, (ui_full or ui_debug) ? "icons: " + str.tostring(icon_keep_eff) + "/" + str.tostring(icon_keep) : "", text_color=color.silver)
+    table.cell(hud, 2, 4, (ui_full or ui_debug) ? (icons_budget_disabled ? "icons disabled (budget)" : "icons: " + str.tostring(icon_keep_eff) + "/" + str.tostring(icon_keep)) : "", text_color=color.silver)
 
 
 var string[] audit_times = array.new_string()
