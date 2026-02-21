@@ -1,5 +1,15 @@
 # DEV Changelog
 
+## 2026-02-21 — v12: POC mode wiring + TF guards + HUD diagnostics
+
+- Wired `poc_proxy_mode` into runtime POC calculation in `prizrak_trade_setup_detector_v12_0_0.pine`:
+  - `FAST` keeps existing volume-bin proxy on HLC3.
+  - `EXACT` now switches to VWAP-style weighted proxy and HUD clarifies that true tape POC is unavailable in Pine API.
+- Added LTF guardrail: if selected/manual LTF is lower than chart TF, script auto-clamps to chart TF and flags it in HUD (`[LTF CLAMP]`).
+- Added HTF hierarchy diagnostic: HUD now warns when expected order `HTF1 > HTF2 > HTF3` is violated in manual mode.
+- Improved object-prune budget scaling for optional HTF3 by using dynamic slot factor (`4` without HTF3, `6` with HTF3).
+- Added explicit trend-direction note for countertrend logic in debug HUD (`EMA21/EMA55` basis).
+
 ## 2026-02-21 — docs: zone entities and pivot/ATR/volume contour
 
 - Updated `docs/INDICATOR_SPEC.md` with a dedicated section describing zone entities and lifecycle-oriented calculation contour:
