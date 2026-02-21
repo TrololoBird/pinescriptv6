@@ -486,3 +486,19 @@ Verification run:
 
 ## 2026-02-21 — P2 divergence confirm module
 - P2 divergence confirm module.
+
+## 2026-02-21 — UX scenario layer: TP explainability + flip trail
+- Added target explainability text for active BUY/SELL context:
+  - when nearest opposite same-TF zone exists, shows `TP: nearest SUPPLY/DEMAND(<TF>) dist=<...>`,
+  - when no opposite zone exists, shows fallback text `Fallback: ATR*X (no opposite zones)`.
+- HUD mods column and active side labels now include compact TP rationale and, when applicable,
+  `Scenario: flip retest window N bars` for invalidated zones with `flip_on_break` enabled.
+- Flip lifecycle audit trail expanded with explicit entries:
+  - `FLIP_ARMED` on invalidation when flip logic is enabled,
+  - `FLIP_DONE` when retest flip executes,
+  - `FLIP_EXPIRED` when retest window closes without flip.
+- Added optional alerts for scenario automation:
+  - `tp_updated`, `flip_armed`, `flip_done` (mapped to flip execution edge).
+- Interface note:
+  - RELEASE contract intentionally changed due additional alertconditions; lock refreshed via `make contract-init`.
+
