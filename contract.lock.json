@@ -78,8 +78,8 @@
     ]
   },
   "alerts": {
-    "count": 18,
-    "sha256": "4d5f3d96fa5b626667a915bf51f066b508aee6ae0caf31f19e6bfff0b40773de",
+    "count": 21,
+    "sha256": "ab3f425764026cf96953526ba11892080ebf4d0accfde4eb6d7c73a01b316be6",
     "lines": [
       "alertcondition(near_buy_edge, \"near_buy\", \"Price NEAR BUY zone\")",
       "alertcondition(near_sell_edge, \"near_sell\", \"Price NEAR SELL zone\")",
@@ -97,6 +97,9 @@
       "alertcondition(zone_invalidated, \"zone_invalidated\", \"HTF zone invalidated\")",
       "alertcondition(zone_consumed, \"zone_consumed\", \"HTF zone consumed\")",
       "alertcondition(zone_flipped, \"zone_flipped\", \"HTF zone flipped\")",
+      "alertcondition(tp_updated, \"tp_updated\", \"TP target source updated\")",
+      "alertcondition(flip_armed, \"flip_armed\", \"Flip scenario armed\")",
+      "alertcondition(zone_flipped, \"flip_done\", \"Flip scenario completed\")",
       "alertcondition(trap_buy_event, \"trap_event_buy\", \"Trap event BUY\")",
       "alertcondition(trap_sell_event, \"trap_event_sell\", \"Trap event SELL\")"
     ]

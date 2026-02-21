@@ -452,7 +452,9 @@ f_zone_update_visual(int i, bool _draw_now) =>
 f_zone_update_lifecycle(int i, bool _draw_now) =>
     bool consumed_evt = false
     bool invalid_evt = false
+    bool flip_armed_evt = false
     bool flipped_evt = false
+    bool flip_expired_evt = false
     bool removed = false
     Zone z = array.get(zones, i)
     int st = z.status
@@ -492,6 +494,8 @@ f_zone_update_lifecycle(int i, bool _draw_now) =>
         z.break_time := htime
         z.break_seq := z.tf_seq
         invalid_evt := true
+        if flip_on_break
+            flip_armed_evt := true
 
     if flip_on_break and z.status == Z_INVALID
         bool in_win = not na(z.break_seq) and (z.tf_seq - z.break_seq) <= flip_retest_bars
@@ -501,18 +505,20 @@ f_zone_update_lifecycle(int i, bool _draw_now) =>
             flipped_evt := true
             z.break_time := na
             z.break_seq := na
+        else if not in_win
+            flip_expired_evt := true
 
     if z.tf_seq > max_age_bars and z.status <= Z_TOUCHED
         z.status := Z_EXPIRED
 
-    bool keep = z.status == Z_ACTIVE or z.status == Z_TOUCHED or (show_consumed_eff and z.status == Z_CONSUMED)
+    bool keep = z.status == Z_ACTIVE or z.status == Z_TOUCHED or (show_consumed_eff and z.status == Z_CONSUMED) or (flip_on_break and z.status == Z_INVALID and not flip_expired_evt and not flipped_evt)
     if not keep
         f_zone_remove(i)
         removed := true
     else
         array.set(zones, i, z)
         f_zone_update_visual(i, _draw_now)
-    [consumed_evt, invalid_evt, flipped_evt, removed]
+    [consumed_evt, invalid_evt, flip_armed_evt, flipped_evt, flip_expired_evt, removed]
 f_find_zone_index(int _zone_id) =>
     int idx = -1
     for j = 0 to array.size(zones) - 1
@@ -578,7 +584,9 @@ f_zone_prune_limits() =>
 bool zone_created = false
 bool zone_invalidated = false
 bool zone_consumed = false
+bool flip_armed = false
 bool zone_flipped = false
+bool flip_expired = false
 
 if htf1_stop_up > 0 and htf1_stop_up[1] <= 0 and not na(htf1_stop_poc)
     f_zone_add(1, htf1, htf1_stop_poc, htf1_atr, int(htf1_timef), htf1_stop_bh, htf1_stop_bl, "STOPVOL")
@@ -606,10 +614,12 @@ else if htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0 and not na(htf2_poc)
     zone_created := true
 
 for i = array.size(zones) - 1 to 0
-    [consumed_evt, invalid_evt, flipped_evt, removed_evt] = f_zone_update_lifecycle(i, draw_now)
+    [consumed_evt, invalid_evt, flip_armed_evt, flipped_evt, flip_expired_evt, removed_evt] = f_zone_update_lifecycle(i, draw_now)
     zone_consumed := zone_consumed or consumed_evt
     zone_invalidated := zone_invalidated or invalid_evt
+    flip_armed := flip_armed or flip_armed_evt
     zone_flipped := zone_flipped or flipped_evt
+    flip_expired := flip_expired or flip_expired_evt
 
 f_zone_prune_limits()
 
@@ -823,6 +833,8 @@ float buy_tp = has_buy ? buy_entry_plan + rr_fallback_atr * buy_atr : na
 float sell_tp = has_sell ? sell_entry_plan - rr_fallback_atr * sell_atr : na
 float best_buy_tp_dist = na
 float best_sell_tp_dist = na
+string buy_tp_source = has_buy ? "Fallback: ATR*" + str.tostring(rr_fallback_atr, format.mintick) + " (no opposite zones)" : ""
+string sell_tp_source = has_sell ? "Fallback: ATR*" + str.tostring(rr_fallback_atr, format.mintick) + " (no opposite zones)" : ""
 for i = 0 to array.size(zones) - 1
     if has_buy and array.get(zones, i).typ == -1 and array.get(zones, i).status <= Z_TOUCHED and array.get(zones, i).tf == array.get(zones, buy_idx).tf
         float cand_buy_tp = array.get(zones, i).poc
@@ -830,12 +842,18 @@ for i = 0 to array.size(zones) - 1
         if cand_buy_dist > EPS and (na(best_buy_tp_dist) or cand_buy_dist < best_buy_tp_dist)
             best_buy_tp_dist := cand_buy_dist
             buy_tp := cand_buy_tp
+            buy_tp_source := "TP: nearest SUPPLY(" + array.get(zones, i).tf + ") dist=" + str.tostring(cand_buy_dist, format.mintick)
     if has_sell and array.get(zones, i).typ == 1 and array.get(zones, i).status <= Z_TOUCHED and array.get(zones, i).tf == array.get(zones, sell_idx).tf
         float cand_sell_tp = array.get(zones, i).poc
         float cand_sell_dist = sell_entry_plan - cand_sell_tp
         if cand_sell_dist > EPS and (na(best_sell_tp_dist) or cand_sell_dist < best_sell_tp_dist)
             best_sell_tp_dist := cand_sell_dist
             sell_tp := cand_sell_tp
+            sell_tp_source := "TP: nearest DEMAND(" + array.get(zones, i).tf + ") dist=" + str.tostring(cand_sell_dist, format.mintick)
+
+bool buy_tp_updated = has_buy and not na(buy_tp) and not na(buy_tp[1]) and math.abs(buy_tp - buy_tp[1]) > EPS
+bool sell_tp_updated = has_sell and not na(sell_tp) and not na(sell_tp[1]) and math.abs(sell_tp - sell_tp[1]) > EPS
+bool tp_updated = buy_tp_updated or sell_tp_updated
 
 float buy_risk = has_buy and not na(buy_entry_plan) and not na(buy_stop) ? buy_entry_plan - buy_stop : na
 float buy_reward = has_buy and not na(buy_tp) and not na(buy_entry_plan) ? buy_tp - buy_entry_plan : na
@@ -998,10 +1016,12 @@ if draw_now and barstate.islast
         active_sell_label := label.new(time, low, "", xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.new(color.red, 0), color=color.new(color.black, 80), size=size.tiny)
     label.set_x(active_buy_label, time)
     label.set_y(active_buy_label, high)
-    label.set_text(active_buy_label, has_buy ? "BUY: " + buy_origin + " " + (stage_buy == STAGE_LTF_READY ? "READY" : stage_buy) : "BUY: n/a")
+    string buy_flip_scn = has_buy and flip_on_break and buy_idx >= 0 and array.get(zones, buy_idx).status == Z_INVALID and not na(array.get(zones, buy_idx).break_seq) ? "\nScenario: flip retest window " + str.tostring(flip_retest_bars) + " bars" : ""
+    label.set_text(active_buy_label, has_buy ? "BUY: " + buy_origin + " " + (stage_buy == STAGE_LTF_READY ? "READY" : stage_buy) + "\n" + buy_tp_source + buy_flip_scn : "BUY: n/a")
     label.set_x(active_sell_label, time)
     label.set_y(active_sell_label, low)
-    label.set_text(active_sell_label, has_sell ? "SELL: " + sell_origin + " " + (stage_sell == STAGE_LTF_READY ? "READY" : stage_sell) : "SELL: n/a")
+    string sell_flip_scn = has_sell and flip_on_break and sell_idx >= 0 and array.get(zones, sell_idx).status == Z_INVALID and not na(array.get(zones, sell_idx).break_seq) ? "\nScenario: flip retest window " + str.tostring(flip_retest_bars) + " bars" : ""
+    label.set_text(active_sell_label, has_sell ? "SELL: " + sell_origin + " " + (stage_sell == STAGE_LTF_READY ? "READY" : stage_sell) + "\n" + sell_tp_source + sell_flip_scn : "SELL: n/a")
 
 alertcondition(near_buy_edge, "near_buy", "Price NEAR BUY zone")
 alertcondition(near_sell_edge, "near_sell", "Price NEAR SELL zone")
@@ -1019,6 +1039,9 @@ alertcondition(zone_created, "zone_created", "HTF zone created")
 alertcondition(zone_invalidated, "zone_invalidated", "HTF zone invalidated")
 alertcondition(zone_consumed, "zone_consumed", "HTF zone consumed")
 alertcondition(zone_flipped, "zone_flipped", "HTF zone flipped")
+alertcondition(tp_updated, "tp_updated", "TP target source updated")
+alertcondition(flip_armed, "flip_armed", "Flip scenario armed")
+alertcondition(zone_flipped, "flip_done", "Flip scenario completed")
 alertcondition(trap_buy_event, "trap_event_buy", "Trap event BUY")
 alertcondition(trap_sell_event, "trap_event_sell", "Trap event SELL")
 
@@ -1035,13 +1058,13 @@ if draw_now and barstate.islast and show_hud
     table.cell(hud, 1, 1, has_buy ? str.tostring(buy_poc, format.mintick) : "n/a", text_color=color.white)
     table.cell(hud, 2, 1, stage_buy == STAGE_NEAR ? "⏳ NEAR" : stage_buy == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_buy == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_buy == STAGE_ENTRY ? "▲ ENTRY" : stage_buy, text_color=color.white)
     table.cell(hud, 3, 1, blocked_filters_buy ? "⛔ " + block_reason_buy : (wait_trig_buy ? (trig_shift_buy ? "TRIG SHIFT" : trig_valid_buy ? "WAIT TRIG" : "TRIG BAD") : (has_buy and not buy_near ? "FAR" : has_buy and not buy_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_buy ? color.orange : color.silver)
-    table.cell(hud, 4, 1, "TRIG:" + (trig_valid_buy ? "OK" : "BAD") + " RR:" + (has_buy and not na(rr_buy) ? str.tostring(rr_buy, format.mintick) : "n/a") + " PP:" + pp_state_buy + " T/O/L:" + (trap_ok_buy ? "OK" : "BAD") + "/" + (osc_ok_buy ? "OK" : "BAD") + "/" + (ltf_gate_ok_buy ? "OK" : "BAD"), text_color=color.silver)
+    table.cell(hud, 4, 1, "TRIG:" + (trig_valid_buy ? "OK" : "BAD") + " RR:" + (has_buy and not na(rr_buy) ? str.tostring(rr_buy, format.mintick) : "n/a") + " PP:" + pp_state_buy + " T/O/L:" + (trap_ok_buy ? "OK" : "BAD") + "/" + (osc_ok_buy ? "OK" : "BAD") + "/" + (ltf_gate_ok_buy ? "OK" : "BAD") + (has_buy ? "\n" + buy_tp_source : "") + (has_buy and flip_on_break and buy_idx >= 0 and array.get(zones, buy_idx).status == Z_INVALID and not na(array.get(zones, buy_idx).break_seq) ? "\nScenario: flip retest window " + str.tostring(flip_retest_bars) + " bars" : ""), text_color=color.silver)
     table.cell(hud, 5, 1, has_buy ? array.get(zones, buy_idx).tf + "/" + buy_origin : "-", text_color=color.white)
     table.cell(hud, 0, 2, "SELL", text_color=color.red)
     table.cell(hud, 1, 2, has_sell ? str.tostring(sell_poc, format.mintick) : "n/a", text_color=color.white)
     table.cell(hud, 2, 2, stage_sell == STAGE_NEAR ? "⏳ NEAR" : stage_sell == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_sell == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_sell == STAGE_ENTRY ? "▼ ENTRY" : stage_sell, text_color=color.white)
     table.cell(hud, 3, 2, blocked_filters_sell ? "⛔ " + block_reason_sell : (wait_trig_sell ? (trig_shift_sell ? "TRIG SHIFT" : trig_valid_sell ? "WAIT TRIG" : "TRIG BAD") : (has_sell and not sell_near ? "FAR" : has_sell and not sell_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_sell ? color.orange : color.silver)
-    table.cell(hud, 4, 2, "TRIG:" + (trig_valid_sell ? "OK" : "BAD") + " RR:" + (has_sell and not na(rr_sell) ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD"), text_color=color.silver)
+    table.cell(hud, 4, 2, "TRIG:" + (trig_valid_sell ? "OK" : "BAD") + " RR:" + (has_sell and not na(rr_sell) ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD") + (has_sell ? "\n" + sell_tp_source : "") + (has_sell and flip_on_break and sell_idx >= 0 and array.get(zones, sell_idx).status == Z_INVALID and not na(array.get(zones, sell_idx).break_seq) ? "\nScenario: flip retest window " + str.tostring(flip_retest_bars) + " bars" : ""), text_color=color.silver)
     table.cell(hud, 5, 2, has_sell ? array.get(zones, sell_idx).tf + "/" + sell_origin : "-", text_color=color.white)
     table.cell(hud, 0, 3, "TF", text_color=color.white)
     table.cell(hud, 1, 3, htf1 + "/" + htf2 + "/" + ltf + " ui:" + ui_mode, text_color=color.silver)
@@ -1079,6 +1102,12 @@ if zone_consumed
     f_event_push("SYS", "zone", "zone_consumed")
 if zone_flipped
     f_event_push("SYS", "zone", "zone_flipped")
+if flip_armed
+    f_event_push("SYS", "flip", "FLIP_ARMED")
+if zone_flipped
+    f_event_push("SYS", "flip", "FLIP_DONE")
+if flip_expired
+    f_event_push("SYS", "flip", "FLIP_EXPIRED")
 if near_buy_edge
     f_event_push("BUY", "stage", "near_edge")
 if near_sell_edge
