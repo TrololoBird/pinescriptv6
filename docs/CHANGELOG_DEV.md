@@ -1,5 +1,13 @@
 # DEV Changelog
 
+## 2026-02-21 — docs: zone entities and pivot/ATR/volume contour
+
+- Updated `docs/INDICATOR_SPEC.md` with a dedicated section describing zone entities and lifecycle-oriented calculation contour:
+  - pivot-based zone detection (`ta.pivothigh/ta.pivotlow`),
+  - ATR/fixed zone width and SL buffer conventions,
+  - volume confirmation and fake-breakout filtering rules,
+  - MTF direction filtering and per-bar execution sequence.
+
 ## 2026-02-21 — v12 touch semantics + block reason UX clarity
 
 - Added `touch_mode` input (`CLOSE`/`WICK`) in `prizrak_trade_setup_detector_v12_0_0.pine` to make zone entry/touch semantics explicit.
