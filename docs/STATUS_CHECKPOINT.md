@@ -175,3 +175,30 @@
   - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → 4.
   - `rg -c "^.*input\\." prizrak_trade_setup_detector_v12_0_0.pine` → 61.
   - `rg -c "^alertcondition\\(" prizrak_trade_setup_detector_v12_0_0.pine` → 18.
+
+## 2026-02-21T08:35:00Z — Refactor pass planned: Zone struct + functions
+- Baseline before refactor:
+  - `python tools/contract_guard.py --check` → PASS.
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Planned scope:
+  - migrate zone storage from parallel arrays to `type Zone` + `Zone[]`;
+  - introduce function layer (`f_zone_add/remove/update_*`, active selection, pruning);
+  - migrate audit trail to `type Event` + structured push/prune/render.
+
+## 2026-02-21T08:47:00Z — Refactor pass results: Zone struct + event struct
+- Validation after refactor:
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Metrics snapshot:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → 1064.
+  - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → 4.
+  - Interface counts unchanged (`inputs=61`, `alerts=18`).
+- Notes:
+  - refactor performed as data/layout migration (`Zone`/`Event`) without intentional formula or threshold changes.
+
+## 2026-02-21T08:48:10Z — Metrics correction (refactor pass)
+- Corrected post-refactor metric:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → 1067.
