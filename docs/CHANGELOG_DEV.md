@@ -397,3 +397,29 @@ Verification run:
   - `stopvol_len`,
   - `stopvol_exit_confirm`.
 - Interface contract intentionally changed (inputs extended); contract lock was refreshed with `python tools/contract_guard.py --init`.
+
+## 2026-02-21 — P0 fixes: close-in-zone + directional RR + stopvol zones + TF-bar counters + trap_type2 TF-consistent
+
+- P0.1 IN_ZONE semantics split:
+  - added wick-contact variables (`buy_wick_touch` / `sell_wick_touch`) for early contact context,
+  - switched `buy_in_zone` / `sell_in_zone` to **close-in-zone** (`close` within zone bounds),
+  - stage progression, blocked/wait gating, and `in_zone_*` alerts now reflect close-based in-zone state.
+- P0.2 RR gate correctness:
+  - removed `abs(...)` RR math,
+  - BUY now uses `risk = entry - stop`, `reward = tp - entry` with validity only when both > 0,
+  - SELL now uses `risk = stop - entry`, `reward = entry - tp` with validity only when both > 0,
+  - HUD RR field now prints `n/a` when directional geometry is invalid.
+- P0.3 STOPVOL as structural origin:
+  - zone creation now uses confirmed stop edges (`htf*_stop_up/dn`) with `stop_poc` and `stop_bh/bl`,
+  - heuristic `htf*_stopvol` origin tagging was removed as a source of zone origin,
+  - dedup in same HTF bar is enforced by direction-side priority: STOPVOL edge has precedence over BASE edge.
+- P0.4 Session-safe age/flip accounting:
+  - added per-zone TF counters `z_tf_seq` and break anchor `z_break_seq`,
+  - TF sequence increments only on new HTF bar (`htime != z_last_tf_time`),
+  - `age` now uses TF-bar count, and flip window uses `(z_tf_seq - z_break_seq) <= flip_retest_bars`.
+- P0.5 Trap type2 TF consistency:
+  - added HTF `trap_range` export inside existing `f_htf_pack` security outputs (no extra security calls),
+  - trap type2 now compares active-zone TF range and ATR from the same TF,
+  - updated trap input caption from `Trap max bars (zone TF)` to `Trap max bars` to match implementation.
+- Interface note:
+  - RELEASE contract intentionally changed due input caption update; lock refreshed via `python tools/contract_guard.py --init`.

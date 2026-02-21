@@ -54,3 +54,21 @@
   5. Methodology gap: stop-volume origin handling needs parity with v11 module.
 - Deep research report reference note:
   - No in-repo file matched `deep-research-report` by filename (`rg --files | rg -i "deep|research|report"` returned no matches); using user-provided summary as checkpoint source for now.
+
+## 2026-02-21T00:47:12Z — Phase 0 baseline before P0 fixes
+- Audited canonical file: `prizrak_trade_setup_detector_v12_0_0.pine` (indicator title: `v12.2.0`).
+- Baseline command results:
+  - `python tools/contract_guard.py --mode release --check` → PASS.
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Metrics snapshot:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → `962` lines.
+  - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → `4` (within limit <= 6).
+  - Indicator caps unchanged: `max_boxes_count=300`, `max_labels_count=300`.
+- Open P0 issues queued:
+  1. IN_ZONE semantics rely on wick overlap; stages/blocked/wait/alerts should use close-in-zone semantics.
+  2. RR gate uses `abs(...)`, hiding invalid directional risk/reward geometry.
+  3. STOPVOL origin currently tagged by heuristic, while zones are created from base edges instead of stop edges.
+  4. Zone age/flip windows are based on time-delta (`tf_ms`) and can drift across session/weekend gaps.
+  5. Trap type2 mixes chart-TF range with LTF ATR while input text says zone-TF behavior.

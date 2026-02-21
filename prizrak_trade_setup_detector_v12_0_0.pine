@@ -51,7 +51,7 @@ pp_tf = input.timeframe("", "PP timeframe (blank = LTF)", group="Confirm • PP"
 pp_confirm_closes = input.int(2, "PP confirm closes", minval=2, maxval=3, group="Confirm • PP")
 pp_retest_window = input.int(8, "PP retest window", minval=2, maxval=30, group="Confirm • PP")
 
-trap_max_bars = input.int(6, "Trap max bars (zone TF)", minval=1, maxval=20, group="Trap")
+trap_max_bars = input.int(6, "Trap max bars", minval=1, maxval=20, group="Trap")
 trap_use_volume_gate = input.bool(false, "Trap volume gate (zone TF volume)", group="Trap")
 trap_return_volume_mult = input.float(1.1, "Trap return volume mult", minval=0.5, step=0.1, group="Trap")
 
@@ -265,10 +265,10 @@ f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, floa
             stop_lo := na
             stop_exit_cnt := 0
 
-    [edge_up ? 1.0 : 0.0, edge_dn ? 1.0 : 0.0, atr, b_hi, b_lo, poc, time * 1.0, close, open, high, low, volume, vol_ma, stop_edge_up ? 1.0 : 0.0, stop_edge_dn ? 1.0 : 0.0, stop_poc, stop_bhi, stop_blo]
+    [edge_up ? 1.0 : 0.0, edge_dn ? 1.0 : 0.0, atr, b_hi, b_lo, poc, time * 1.0, close, open, high, low, volume, vol_ma, stop_edge_up ? 1.0 : 0.0, stop_edge_dn ? 1.0 : 0.0, stop_poc, stop_bhi, stop_blo, ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars)]
 
-[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol, htf1_vol_ma, htf1_stop_up, htf1_stop_dn, htf1_stop_poc, htf1_stop_bh, htf1_stop_bl] = request.security(syminfo.tickerid, htf1, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
-[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol, htf2_vol_ma, htf2_stop_up, htf2_stop_dn, htf2_stop_poc, htf2_stop_bh, htf2_stop_bl] = request.security(syminfo.tickerid, htf2, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol, htf1_vol_ma, htf1_stop_up, htf1_stop_dn, htf1_stop_poc, htf1_stop_bh, htf1_stop_bl, htf1_trap_range] = request.security(syminfo.tickerid, htf1, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol, htf2_vol_ma, htf2_stop_up, htf2_stop_dn, htf2_stop_poc, htf2_stop_bh, htf2_stop_bl, htf2_trap_range] = request.security(syminfo.tickerid, htf2, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 plot(htf1_edge_up, "DBG htf1_edge_up", color=color.new(color.green, 100), display=display.data_window)
 plot(htf1_edge_dn, "DBG htf1_edge_dn", color=color.new(color.red, 100), display=display.data_window)
 plot(htf2_edge_up, "DBG htf2_edge_up", color=color.new(color.green, 100), display=display.data_window)
@@ -359,6 +359,8 @@ var int[] z_touch = array.new_int()
 var bool[] z_inside_prev = array.new_bool()
 var int[] z_inv_cnt = array.new_int()
 var int[] z_last_tf_time = array.new_int()
+var int[] z_tf_seq = array.new_int()
+var int[] z_break_seq = array.new_int()
 var float[] z_base_hi = array.new_float()
 var float[] z_base_lo = array.new_float()
 var int[] z_break_time = array.new_int()
@@ -410,6 +412,8 @@ f_create_zone(int _type, string _tf, float _poc, float _atr, int _t, float _bhi,
     array.push(z_inside_prev, false)
     array.push(z_inv_cnt, 0)
     array.push(z_last_tf_time, _t)
+    array.push(z_tf_seq, 0)
+    array.push(z_break_seq, na)
     array.push(z_base_hi, _bhi)
     array.push(z_base_lo, _blo)
     array.push(z_break_time, na)
@@ -440,6 +444,8 @@ f_remove_zone(int i) =>
     array.remove(z_inside_prev, i)
     array.remove(z_inv_cnt, i)
     array.remove(z_last_tf_time, i)
+    array.remove(z_tf_seq, i)
+    array.remove(z_break_seq, i)
     array.remove(z_base_hi, i)
     array.remove(z_base_lo, i)
     array.remove(z_break_time, i)
@@ -496,20 +502,29 @@ bool zone_invalidated = false
 bool zone_consumed = false
 bool zone_flipped = false
 
-bool htf1_stopvol = stopvol_enabled and not na(htf1_bh) and not na(htf1_bl) and not na(htf1_atr) and not na(htf1_vol_ma) and (htf1_bh - htf1_bl) <= htf1_atr * stopvol_range_atr_mult and htf1_vol >= htf1_vol_ma * stopvol_vol_mult
-bool htf2_stopvol = stopvol_enabled and not na(htf2_bh) and not na(htf2_bl) and not na(htf2_atr) and not na(htf2_vol_ma) and (htf2_bh - htf2_bl) <= htf2_atr * stopvol_range_atr_mult and htf2_vol >= htf2_vol_ma * stopvol_vol_mult
-
-if htf1_edge_up > 0 and htf1_edge_up[1] <= 0 and not na(htf1_poc)
-    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, htf1_stopvol ? "STOPVOL" : "BASE")
+if htf1_stop_up > 0 and htf1_stop_up[1] <= 0 and not na(htf1_stop_poc)
+    f_create_zone(1, htf1, htf1_stop_poc, htf1_atr, int(htf1_timef), htf1_stop_bh, htf1_stop_bl, "STOPVOL")
     zone_created := true
-if htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0 and not na(htf1_poc)
-    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, htf1_stopvol ? "STOPVOL" : "BASE")
+else if htf1_edge_up > 0 and htf1_edge_up[1] <= 0 and not na(htf1_poc)
+    f_create_zone(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, "BASE")
     zone_created := true
-if htf2_edge_up > 0 and htf2_edge_up[1] <= 0 and not na(htf2_poc)
-    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, htf2_stopvol ? "STOPVOL" : "BASE")
+if htf1_stop_dn > 0 and htf1_stop_dn[1] <= 0 and not na(htf1_stop_poc)
+    f_create_zone(-1, htf1, htf1_stop_poc, htf1_atr, int(htf1_timef), htf1_stop_bh, htf1_stop_bl, "STOPVOL")
     zone_created := true
-if htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0 and not na(htf2_poc)
-    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, htf2_stopvol ? "STOPVOL" : "BASE")
+else if htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0 and not na(htf1_poc)
+    f_create_zone(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, "BASE")
+    zone_created := true
+if htf2_stop_up > 0 and htf2_stop_up[1] <= 0 and not na(htf2_stop_poc)
+    f_create_zone(1, htf2, htf2_stop_poc, htf2_atr, int(htf2_timef), htf2_stop_bh, htf2_stop_bl, "STOPVOL")
+    zone_created := true
+else if htf2_edge_up > 0 and htf2_edge_up[1] <= 0 and not na(htf2_poc)
+    f_create_zone(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, "BASE")
+    zone_created := true
+if htf2_stop_dn > 0 and htf2_stop_dn[1] <= 0 and not na(htf2_stop_poc)
+    f_create_zone(-1, htf2, htf2_stop_poc, htf2_atr, int(htf2_timef), htf2_stop_bh, htf2_stop_bl, "STOPVOL")
+    zone_created := true
+else if htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0 and not na(htf2_poc)
+    f_create_zone(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, "BASE")
     zone_created := true
 
 for i = array.size(z_id) - 1 to 0
@@ -560,21 +575,25 @@ for i = array.size(z_id) - 1 to 0
         inv_cnt := inv_body ? inv_cnt + 1 : 0
         array.set(z_inv_cnt, i, inv_cnt)
         array.set(z_last_tf_time, i, htime)
+        array.set(z_tf_seq, i, array.get(z_tf_seq, i) + 1)
     if inv_cnt >= invalidate_confirm_bars and st <= Z_TOUCHED
         array.set(z_status, i, Z_INVALID)
         array.set(z_break_time, i, htime)
+        array.set(z_break_seq, i, array.get(z_tf_seq, i))
         zone_invalidated := true
 
     if flip_on_break and array.get(z_status, i) == Z_INVALID
-        int bt = array.get(z_break_time, i)
-        bool in_win = not na(bt) and int((htime - bt) / math.max(f_tf_ms(tfz), 1)) <= flip_retest_bars
+        int break_seq = array.get(z_break_seq, i)
+        int seq_now = array.get(z_tf_seq, i)
+        bool in_win = not na(break_seq) and (seq_now - break_seq) <= flip_retest_bars
         bool retest_ok = typ == 1 ? hhigh >= bot and hclose <= bot : hlow <= top and hclose >= top
         if in_win and retest_ok
             f_create_zone(-typ, tfz, array.get(z_poc, i), atrz, htime, array.get(z_base_hi, i), array.get(z_base_lo, i), array.get(z_origin, i))
             zone_flipped := true
             array.set(z_break_time, i, na)
+            array.set(z_break_seq, i, na)
 
-    int age = int((time - array.get(z_time, i)) / math.max(f_tf_ms(tfz), 1))
+    int age = array.get(z_tf_seq, i)
     if age > max_age_bars and array.get(z_status, i) <= Z_TOUCHED
         array.set(z_status, i, Z_EXPIRED)
 
@@ -690,8 +709,10 @@ float sell_atr = has_sell ? array.get(z_atr, sell_idx) : na
 string buy_origin = has_buy ? array.get(z_origin, buy_idx) : "-"
 string sell_origin = has_sell ? array.get(z_origin, sell_idx) : "-"
 
-bool buy_in_zone = has_buy and high >= buy_bot and low <= buy_top
-bool sell_in_zone = has_sell and high >= sell_bot and low <= sell_top
+bool buy_wick_touch = has_buy and high >= buy_bot and low <= buy_top
+bool sell_wick_touch = has_sell and high >= sell_bot and low <= sell_top
+bool buy_in_zone = has_buy and close >= buy_bot and close <= buy_top
+bool sell_in_zone = has_sell and close >= sell_bot and close <= sell_top
 bool buy_near = has_buy and buy_dist <= near_thr_atr * buy_atr
 bool sell_near = has_sell and sell_dist <= near_thr_atr * sell_atr
 bool ltf_gate_ok_buy = has_buy and (not use_ltf_entry_gate or (ltf_gate_mode == "IN_ZONE" ? buy_in_zone : buy_near or (buy_dist <= ltf_near_atr * ltf_atr)))
@@ -719,10 +740,14 @@ string pp_state_sell = pp_ok_sell ? "OK" : (pp_true_sell_state == 0 ? "WAI" : "B
 
 bool trap_buy_event = has_buy and low < buy_bot and close >= buy_bot
 bool trap_sell_event = has_sell and high > sell_top and close <= sell_top
-bool trap_type2_buy = has_buy and close > buy_top and ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars) <= ltf_atr
-bool trap_type2_sell = has_sell and close < sell_bot and ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars) <= ltf_atr
 string buy_tf = has_buy ? array.get(z_tf, buy_idx) : ""
 string sell_tf = has_sell ? array.get(z_tf, sell_idx) : ""
+float buy_tf_atr = buy_tf == htf1 ? htf1_atr : buy_tf == htf2 ? htf2_atr : na
+float sell_tf_atr = sell_tf == htf1 ? htf1_atr : sell_tf == htf2 ? htf2_atr : na
+float buy_tf_trap_range = buy_tf == htf1 ? htf1_trap_range : buy_tf == htf2 ? htf2_trap_range : na
+float sell_tf_trap_range = sell_tf == htf1 ? htf1_trap_range : sell_tf == htf2 ? htf2_trap_range : na
+bool trap_type2_buy = has_buy and close > buy_top and not na(buy_tf_trap_range) and not na(buy_tf_atr) and buy_tf_trap_range <= buy_tf_atr
+bool trap_type2_sell = has_sell and close < sell_bot and not na(sell_tf_trap_range) and not na(sell_tf_atr) and sell_tf_trap_range <= sell_tf_atr
 float buy_tf_vol = buy_tf == htf1 ? htf1_vol : buy_tf == htf2 ? htf2_vol : na
 float buy_tf_vol_ma = buy_tf == htf1 ? htf1_vol_ma : buy_tf == htf2 ? htf2_vol_ma : na
 float sell_tf_vol = sell_tf == htf1 ? htf1_vol : sell_tf == htf2 ? htf2_vol : na
@@ -781,10 +806,14 @@ for i = 0 to array.size(z_id) - 1
             best_sell_tp_dist := cand_sell_dist
             sell_tp := cand_sell_tp
 
-float rr_buy = has_buy ? math.abs((buy_tp - buy_entry_plan) / math.max(buy_entry_plan - buy_stop, syminfo.mintick)) : na
-float rr_sell = has_sell ? math.abs((sell_entry_plan - sell_tp) / math.max(sell_stop - sell_entry_plan, syminfo.mintick)) : na
-bool rr_ok_buy = not use_rr_gate or (has_buy and rr_buy >= rr_min)
-bool rr_ok_sell = not use_rr_gate or (has_sell and rr_sell >= rr_min)
+float buy_risk = has_buy and not na(buy_entry_plan) and not na(buy_stop) ? buy_entry_plan - buy_stop : na
+float buy_reward = has_buy and not na(buy_tp) and not na(buy_entry_plan) ? buy_tp - buy_entry_plan : na
+float sell_risk = has_sell and not na(sell_stop) and not na(sell_entry_plan) ? sell_stop - sell_entry_plan : na
+float sell_reward = has_sell and not na(sell_entry_plan) and not na(sell_tp) ? sell_entry_plan - sell_tp : na
+float rr_buy = has_buy and not na(buy_risk) and not na(buy_reward) and buy_risk > EPS and buy_reward > EPS ? buy_reward / buy_risk : na
+float rr_sell = has_sell and not na(sell_risk) and not na(sell_reward) and sell_risk > EPS and sell_reward > EPS ? sell_reward / sell_risk : na
+bool rr_ok_buy = not use_rr_gate or (has_buy and not na(rr_buy) and rr_buy >= rr_min)
+bool rr_ok_sell = not use_rr_gate or (has_sell and not na(rr_sell) and rr_sell >= rr_min)
 
 float buy_trig_level = entry_plan_mode == "ZONE_EDGE" ? buy_top : math.max(ltf_trig_up, buy_entry_plan)
 float sell_trig_level = entry_plan_mode == "ZONE_EDGE" ? sell_bot : math.min(ltf_trig_dn, sell_entry_plan)
@@ -943,13 +972,13 @@ if barstate.islast and show_hud
     table.cell(hud, 1, 1, has_buy ? str.tostring(buy_poc, format.mintick) : "n/a", text_color=color.white)
     table.cell(hud, 2, 1, stage_buy == STAGE_NEAR ? "⏳ NEAR" : stage_buy == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_buy == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_buy == STAGE_ENTRY ? "▲ ENTRY" : stage_buy, text_color=color.white)
     table.cell(hud, 3, 1, blocked_filters_buy ? "⛔ " + block_reason_buy : (wait_trig_buy ? "WAIT TRIG" : (has_buy and not buy_near ? "FAR" : has_buy and not buy_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_buy ? color.orange : color.silver)
-    table.cell(hud, 4, 1, "RR:" + (has_buy ? str.tostring(rr_buy, format.mintick) : "n/a") + " PP:" + pp_state_buy + " T/O/L:" + (trap_ok_buy ? "OK" : "BAD") + "/" + (osc_ok_buy ? "OK" : "BAD") + "/" + (ltf_gate_ok_buy ? "OK" : "BAD"), text_color=color.silver)
+    table.cell(hud, 4, 1, "RR:" + (has_buy and not na(rr_buy) ? str.tostring(rr_buy, format.mintick) : "n/a") + " PP:" + pp_state_buy + " T/O/L:" + (trap_ok_buy ? "OK" : "BAD") + "/" + (osc_ok_buy ? "OK" : "BAD") + "/" + (ltf_gate_ok_buy ? "OK" : "BAD"), text_color=color.silver)
     table.cell(hud, 5, 1, has_buy ? array.get(z_tf, buy_idx) + "/" + buy_origin : "-", text_color=color.white)
     table.cell(hud, 0, 2, "SELL", text_color=color.red)
     table.cell(hud, 1, 2, has_sell ? str.tostring(sell_poc, format.mintick) : "n/a", text_color=color.white)
     table.cell(hud, 2, 2, stage_sell == STAGE_NEAR ? "⏳ NEAR" : stage_sell == STAGE_IN_ZONE ? "⚡ IN_ZONE" : stage_sell == STAGE_CONFIRM_READY ? "✅ CONFIRM_READY" : stage_sell == STAGE_ENTRY ? "▼ ENTRY" : stage_sell, text_color=color.white)
     table.cell(hud, 3, 2, blocked_filters_sell ? "⛔ " + block_reason_sell : (wait_trig_sell ? "WAIT TRIG" : (has_sell and not sell_near ? "FAR" : has_sell and not sell_in_zone ? "NEAR" : "WAIT FILTERS")), text_color=blocked_filters_sell ? color.orange : color.silver)
-    table.cell(hud, 4, 2, "RR:" + (has_sell ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD"), text_color=color.silver)
+    table.cell(hud, 4, 2, "RR:" + (has_sell and not na(rr_sell) ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD"), text_color=color.silver)
     table.cell(hud, 5, 2, has_sell ? array.get(z_tf, sell_idx) + "/" + sell_origin : "-", text_color=color.white)
     table.cell(hud, 0, 3, "TF", text_color=color.white)
     table.cell(hud, 1, 3, htf1 + "/" + htf2 + "/" + ltf, text_color=color.silver)
