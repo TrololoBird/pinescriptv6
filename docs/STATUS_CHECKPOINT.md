@@ -202,3 +202,6 @@
 ## 2026-02-21T08:48:10Z — Metrics correction (refactor pass)
 - Corrected post-refactor metric:
   - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → 1067.
+
+## 2026-02-21T11:35:11Z — P2 divergence module planned
+- P2 divergence module planned.
