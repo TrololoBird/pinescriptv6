@@ -100,3 +100,55 @@ RR считается **от entry_plan**:
 - Trap volume gate must use active zone TF only (`z_tf[buy_idx]/z_tf[sell_idx]`), not `HTF1 OR HTF2`.
 - RR target uses nearest valid opposite-zone POC on same TF and correct side; otherwise `rr_fallback_atr * ATR`.
 - P0 scope excludes unrelated origin/features; keep zone origin behavior unchanged unless separate task explicitly requests it.
+
+## 6) Сущности зон и расчётный контур (pivot/ATR/volume)
+
+### 6.1 Базовые сущности зоны
+- `pivot_high` / `pivot_low` (источник экстремума):
+  - `ph = ta.pivothigh(high, L, R)`
+  - `pl = ta.pivotlow(low, L, R)`
+- `zone_center`: цена подтверждённого экстремума (`ph` или `pl`).
+- `zone_top` / `zone_bot`: границы зоны, вычисляемые как фиксированный отступ или `center ± k*ATR`.
+- `zone_tf`: таймфрейм, на котором зона создана (для MTF-валидации/инвалидации).
+- `zone_state`: `ACTIVE` → `TOUCHED` → (`CONSUMED` | `INVALID` | `EXPIRED`).
+
+### 6.2 Детекция и проекция зоны
+1. На каждом баре считаем pivot-сигналы с параметрами `L/R`.
+2. Подтверждённый pivot создаёт новую горизонтальную зону (`box`) с правой проекцией.
+3. Правая граница зоны продлевается на каждом новом баре, пока зона не станет `INVALID`/`EXPIRED`.
+4. Для ограничения бюджета объектов используются:
+   - верхний лимит активных зон,
+   - удаление старых/неактуальных зон,
+   - приоритет более свежих зон на том же TF.
+
+### 6.3 Ширина зоны и SL-buffer
+- Режим фиксированной ширины: `zone_halfwidth = fixed_ticks_or_percent`.
+- Режим волатильности: `zone_halfwidth = atr_mult * ta.atr(atr_len)`.
+- Рекомендованный защитный буфер за пределом зоны:
+  - `sl_buffer = max(percent_buffer, atr_sl_mult * ATR)`.
+
+Это даёт стабильную геометрию зоны на спокойном рынке и расширяет допуск на волатильном.
+
+### 6.4 Объёмные подтверждения и fake-breakout фильтр
+- Базовый volume baseline: `vol_ma = ta.sma(volume, vol_len)`.
+- Признак stop-volume (для спроса внизу диапазона):
+  - `stop_vol = volume > vol_ma * stop_vol_mult` при нисходящем импульсе в зону.
+- Подтверждённый пробой зоны:
+  - выход цены за границу зоны + `volume > vol_ma * breakout_vol_mult`.
+- Вероятный ложный пробой (ловушка):
+  - краткий выход за зону при слабом объёме (`volume <= vol_ma * weak_break_mult`) с быстрым возвратом внутрь.
+
+### 6.5 MTF-фильтрация
+- Сигнал в зоне младшего ТФ валидируется направлением старшего ТФ.
+- Базовый приоритет:
+  - HTF uptrend: предпочтение long-реакций в demand-зонах.
+  - HTF downtrend: предпочтение short-реакций в supply-зонах.
+- При конфликте MTF допускается перевод стадии в `BLOCKED` до получения подтверждения (`PP/TRAP/volume`).
+
+### 6.6 Псевдо-контур исполнения на бар
+1. Обновить pivot/ATR/объёмные метрики.
+2. Создать/расширить зоны.
+3. Проверить факт входа цены в активные зоны.
+4. Применить фильтры (volume + MTF + trap/PP).
+5. Выпустить stage/alert-события.
+6. Обновить lifecycle зон и удалить невалидные объекты.
