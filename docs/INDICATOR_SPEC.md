@@ -152,3 +152,14 @@ RR считается **от entry_plan**:
 4. Применить фильтры (volume + MTF + trap/PP).
 5. Выпустить stage/alert-события.
 6. Обновить lifecycle зон и удалить невалидные объекты.
+
+
+## v12.3.0 additions
+
+- **Countertrend policy**: when enabled, zone selection checks HTF direction (EMA21/EMA55 proxy on zone TF). Opposite-direction zones are either ignored or penalized.
+- **HTF hierarchy**: optional HTF3 introduced for deeper multi-timeframe stacking.
+- **POC mode**:
+  - `FAST`: histogram proxy (current implementation).
+  - `EXACT`: reserved mode; currently falls back to FAST with explicit HUD note pending native TV volume-profile API in Pine.
+- **Render controls**: `show_active_zones_only` hides non-active history zones for cleaner execution view.
+- **HUD guidance**: blocking diagnostics now include actionable next-step hint for delayed pivot confirmations.

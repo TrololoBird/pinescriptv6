@@ -519,3 +519,18 @@ Verification run:
 - Interface note:
   - RELEASE contract intentionally changed due additional alertconditions; lock refreshed via `make contract-init`.
 
+
+
+## 2026-02-21 — v12.3.0 refactor + anti-repaint/HTF extensions
+
+- Refactored monolithic stage logic into reusable helpers for POC calculation, trigger validation, RR computation, and block hints (`f_calculate_poc`, `f_detect_trigger`, `f_compute_rr`, `f_block_hint`).
+- Added configurable countertrend filter (`countertrend_enabled`) with action modes:
+  - `IGNORE`: skip opposite-HTF zones from active selection,
+  - `PENALIZE`: keep candidates but demote by configurable score penalty.
+- Added optional third HTF layer (`use_htf3`, `manual_htf3`) and integrated it into zone creation and per-side pruning.
+- Added POC proxy mode selector (`poc_proxy_mode`) with explicit HUD/runtime note that `EXACT` falls back to FAST proxy until TradingView exposes a volume-profile API.
+- Enhanced HUD blocking UX:
+  - block reasons split into atomic tokens,
+  - guidance hint added (`Следующий шаг: дождитесь подтверждённого пивота`).
+- Added active-zone rendering toggle (`show_active_zones_only`) to reduce history clutter.
+- Added lightweight unit scenarios (`tests_zone_logic.py`) for sideways, impulse-trend, and trap-like selection behavior.
