@@ -108,7 +108,7 @@ float EPS = syminfo.mintick * 0.25
 f_tf_ms(string _tf) => int(timeframe.in_seconds(_tf) * 1000)
 f_clamp(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
 f_inside_zone(float _bot, float _top) => touch_mode == "WICK" ? (low <= _top and high >= _bot) : (close >= _bot and close <= _top)
-f_calculate_poc(float _lo, float _hi, int _bins, int _bars_cap, int _src_shift) =>
+f_calculate_poc(float _lo, float _hi, int _bins, int _bars_cap, int _src_shift, string _mode) =>
     var float[] bins = array.new_float(0)
     if array.size(bins) != _bins
         array.clear(bins)
@@ -129,7 +129,16 @@ f_calculate_poc(float _lo, float _hi, int _bins, int _bars_cap, int _src_shift) 
             vmax := v
             max_idx := bi
     float bw = den / _bins
-    _lo + bw * max_idx + bw * 0.5
+    float poc_fast = _lo + bw * max_idx + bw * 0.5
+    float pv = 0.0
+    float vv = 0.0
+    for j = 0 to _bars_cap - 1
+        int src = j + _src_shift
+        float w = math.max(volume[src], 0.0)
+        pv += hlc3[src] * w
+        vv += w
+    float poc_vwap = vv > 0 ? pv / vv : poc_fast
+    _mode == "EXACT" ? poc_vwap : poc_fast
 
 f_detect_trigger(bool _has_zone, float _trig, float _entry, int _side) =>
     trigger_mode == "LEGACY_MAX" ? (_has_zone and not na(_trig)) : (_has_zone and not na(_trig) and not na(_entry) and (_side == 1 ? _trig > _entry + EPS : _trig < _entry - EPS))
@@ -150,7 +159,14 @@ string htf1 = mode_tf == "AUTO" ? auto_htf1 : manual_htf1
 string htf2 = mode_tf == "AUTO" ? auto_htf2 : manual_htf2
 string htf3 = mode_tf == "AUTO" ? auto_htf3 : manual_htf3
 string ltf_auto = auto_ltf_mode == "AUTO_BY_HTF2" ? (timeframe.in_seconds(htf2) <= 60 * 60 ? "5" : "15") : auto_ltf_by_chart
-string ltf = mode_tf == "AUTO" ? (auto_ltf_mode == "CHART" ? timeframe.period : ltf_auto) : (str.length(manual_ltf) > 0 ? manual_ltf : timeframe.period)
+string ltf_raw = mode_tf == "AUTO" ? (auto_ltf_mode == "CHART" ? timeframe.period : ltf_auto) : (str.length(manual_ltf) > 0 ? manual_ltf : timeframe.period)
+int ltf_raw_sec = timeframe.in_seconds(ltf_raw)
+bool ltf_below_chart = not na(ltf_raw_sec) and ltf_raw_sec < tf_sec
+string ltf = ltf_below_chart ? timeframe.period : ltf_raw
+float htf1_sec = timeframe.in_seconds(htf1)
+float htf2_sec = timeframe.in_seconds(htf2)
+float htf3_sec = timeframe.in_seconds(htf3)
+bool htf_order_ok = not na(htf1_sec) and not na(htf2_sec) and (not use_htf3 or not na(htf3_sec)) and htf1_sec > htf2_sec and (not use_htf3 or htf2_sec > htf3_sec)
 string pp_tf_eff = str.length(pp_tf) > 0 ? pp_tf : ltf
 
 f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, float _max_range_atr, int _exit_confirm, int _bins, int _base_max_bars) =>
@@ -242,7 +258,7 @@ f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, floa
                 b_lo := prev_lo
                 int bars_cap = math.max(math.min(base_bars, _base_max_bars), 1)
                 int break_span = math.max(out_up, out_dn)
-                poc := f_calculate_poc(b_lo, b_hi, _bins, bars_cap, break_span)
+                poc := f_calculate_poc(b_lo, b_hi, _bins, bars_cap, break_span, poc_proxy_mode)
 
     if st == BASE_BREAK_UP or st == BASE_BREAK_DN
         st := BASE_SEEK
@@ -278,7 +294,7 @@ f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, floa
             stop_blo := stop_lo
             int stop_cap = math.max(math.min(stopvol_len, _base_max_bars), 1)
             int stop_break_span = stopvol_exit_confirm
-            stop_poc := f_calculate_poc(stop_lo, stop_hi, _bins, stop_cap, stop_break_span)
+            stop_poc := f_calculate_poc(stop_lo, stop_hi, _bins, stop_cap, stop_break_span, poc_proxy_mode)
             in_stop := false
             stop_hi := na
             stop_lo := na
@@ -598,8 +614,9 @@ f_zone_select_active(int _side) =>
     best_idx
 
 f_zone_prune_limits() =>
+    int tf_slots = use_htf3 ? 6 : 4
     int cleanup_iterations = 0
-    while array.size(zones) > max_zones_per_tf * 4 and cleanup_iterations < MAX_CLEANUP_ITERATIONS
+    while array.size(zones) > max_zones_per_tf * tf_slots and cleanup_iterations < MAX_CLEANUP_ITERATIONS
         f_zone_remove(0)
         cleanup_iterations += 1
 
@@ -837,7 +854,10 @@ bool trap_ok_buy = not use_trap_confirm or ((trap_buy_event or trap_type2_buy) a
 bool trap_ok_sell = not use_trap_confirm or ((trap_sell_event or trap_type2_sell) and trap_vol_ok_sell)
 
 float buy_entry_plan = has_buy ? (entry_plan_mode == "POC" ? buy_poc : buy_top) : na
-string poc_mode_note = poc_proxy_mode == "EXACT" ? "EXACT unavailable in Pine API, using FAST proxy" : "FAST proxy"
+string poc_mode_note = poc_proxy_mode == "EXACT" ? "EXACT=VWAP proxy (true tape POC unavailable in Pine)" : "FAST=volume bins on HLC3"
+string trend_note = "Trend dir: EMA21>EMA55 bullish, EMA21<EMA55 bearish"
+string tf_guard_note = ltf_below_chart ? "LTF guard: requested " + ltf_raw + " < chart, forced to " + ltf : ""
+string htf_guard_note = htf_order_ok ? "" : "HTF order warning: expected HTF1>HTF2>HTF3"
 float sell_entry_plan = has_sell ? (entry_plan_mode == "POC" ? sell_poc : sell_bot) : na
 float buy_base_lo = has_buy ? array.get(zones, buy_idx).base_lo : na
 float sell_base_hi = has_sell ? array.get(zones, sell_idx).base_hi : na
@@ -1120,11 +1140,16 @@ if draw_now and barstate.islast and show_hud
     table.cell(hud, 4, 2, "TRIG:" + (trig_valid_sell ? "OK" : "BAD") + " RR:" + (has_sell and not na(rr_sell) ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD") + (has_sell ? "\n" + sell_tp_source : "") + (has_sell and flip_on_break and sell_idx >= 0 and array.get(zones, sell_idx).status == Z_INVALID and not na(array.get(zones, sell_idx).break_seq) ? "\nScenario: flip retest window " + str.tostring(flip_retest_bars) + " bars" : ""), text_color=color.silver)
     table.cell(hud, 5, 2, has_sell ? array.get(zones, sell_idx).tf + "/" + sell_origin : "-", text_color=color.white)
     table.cell(hud, 0, 3, "TF", text_color=color.white)
-    table.cell(hud, 1, 3, htf1 + "/" + htf2 + (use_htf3 ? "/" + htf3 : "") + "/" + ltf + " ui:" + ui_mode + " touch:" + touch_mode + " poc:" + poc_proxy_mode, text_color=color.silver)
+    table.cell(hud, 1, 3, htf1 + "/" + htf2 + (use_htf3 ? "/" + htf3 : "") + "/" + ltf + " ui:" + ui_mode + " touch:" + touch_mode + " poc:" + poc_proxy_mode + (ltf_below_chart ? " [LTF CLAMP]" : "") + (htf_order_ok ? "" : " [HTF ORDER?]"), text_color=color.silver)
     table.cell(hud, 0, 4, ui_clean ? "Mode" : "Legend", text_color=color.white)
     table.cell(hud, 1, 4, ui_clean ? "CLEAN" : "⏳ near ⚡ zone ✅ confirm ▲▼ entry ⛔ blocked", text_color=color.silver)
     table.cell(hud, 2, 4, (ui_full or ui_debug) ? (icons_budget_disabled ? "icons disabled (budget)" : "icons: " + str.tostring(icon_keep_eff) + "/" + str.tostring(icon_keep)) : "", text_color=color.silver)
     table.cell(hud, 6, 4, (ui_full or ui_debug) ? "PP/DIV use confirmed pivots (delayed)" : "", text_color=color.silver)
+    if ui_debug
+        table.cell(hud, 2, 3, poc_mode_note, text_color=color.orange)
+        table.cell(hud, 3, 3, trend_note, text_color=color.silver)
+        table.cell(hud, 4, 3, tf_guard_note, text_color=color.orange)
+        table.cell(hud, 5, 3, htf_guard_note, text_color=color.orange)
 
 
 type Event
