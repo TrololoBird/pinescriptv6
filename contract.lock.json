@@ -8,8 +8,8 @@
     ]
   },
   "inputs": {
-    "count": 61,
-    "sha256": "f39c1e00433ac2fd85a5b77c4400b36aeb5be75602bec24e7307f60e3697e000",
+    "count": 64,
+    "sha256": "611bf7cfe42200e9d4774b4e380ed324d3d98df2d57d181734f28e95db1bb58c",
     "lines": [
       "mode_tf = input.string(\"AUTO\", \"TF mode\", options=[\"AUTO\", \"MANUAL\"], group=\"TF Hierarchy\")",
       "manual_htf1 = input.timeframe(\"240\", \"Manual HTF1\", group=\"TF Hierarchy\")",
@@ -51,7 +51,10 @@
       "rr_fallback_atr = input.float(3.0, \"RR fallback target ATR\", minval=0.5, step=0.5, group=\"Stages\")",
       "use_ema_bias_confirm = input.bool(true, \"Use EMA_BIAS\", group=\"Stages\")",
       "use_trap_confirm = input.bool(false, \"Use TRAP\", group=\"Stages\")",
-      "use_osc_confirm = input.bool(true, \"Use RSI+MACD\", group=\"Stages\")",
+      "osc_mode = input.string(\"SIMPLE\", \"Oscillator confirm mode\", options=[\"OFF\", \"SIMPLE\", \"DIVERGENCE\"], group=\"Stages\")",
+      "div_left_bars = input.int(2, \"Divergence pivot left bars\", minval=1, maxval=8, group=\"Stages\")",
+      "div_right_bars = input.int(2, \"Divergence pivot right bars\", minval=1, maxval=8, group=\"Stages\")",
+      "div_lookback_bars = input.int(120, \"Divergence lookback bars\", minval=20, maxval=800, group=\"Stages\")",
       "pp_enabled = input.bool(true, \"Enable PP confirm\", group=\"Confirm • PP\")",
       "pp_type = input.string(\"BOTH\", \"PP type\", options=[\"TRUE\", \"EARLY\", \"BOTH\"], group=\"Confirm • PP\")",
       "pp_tf = input.timeframe(\"\", \"PP timeframe (blank = LTF)\", group=\"Confirm • PP\")",

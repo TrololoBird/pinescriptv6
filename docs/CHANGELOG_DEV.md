@@ -483,3 +483,6 @@ Verification run:
 - Added zone helper functions: `f_zone_add`, `f_zone_remove`, `f_zone_update_visual`, `f_zone_update_lifecycle`, `f_zone_select_active`, `f_zone_prune_limits`.
 - Replaced audit parallel arrays with `type Event` + `var Event[] events` and helper functions `f_event_push` / `f_event_prune` / `f_event_render_row`.
 - Refactor-only pass intended to preserve existing logic/thresholds/TF behavior.
+
+## 2026-02-21 — P2 divergence confirm module
+- P2 divergence confirm module.

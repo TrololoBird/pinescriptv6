@@ -44,7 +44,10 @@ stopvol_near_pct = input.float(0.5, "StopVol near threshold %", minval=0.1, step
 rr_fallback_atr = input.float(3.0, "RR fallback target ATR", minval=0.5, step=0.5, group="Stages")
 use_ema_bias_confirm = input.bool(true, "Use EMA_BIAS", group="Stages")
 use_trap_confirm = input.bool(false, "Use TRAP", group="Stages")
-use_osc_confirm = input.bool(true, "Use RSI+MACD", group="Stages")
+osc_mode = input.string("SIMPLE", "Oscillator confirm mode", options=["OFF", "SIMPLE", "DIVERGENCE"], group="Stages")
+div_left_bars = input.int(2, "Divergence pivot left bars", minval=1, maxval=8, group="Stages")
+div_right_bars = input.int(2, "Divergence pivot right bars", minval=1, maxval=8, group="Stages")
+div_lookback_bars = input.int(120, "Divergence lookback bars", minval=20, maxval=800, group="Stages")
 
 pp_enabled = input.bool(true, "Enable PP confirm", group="Confirm • PP")
 pp_type = input.string("BOTH", "PP type", options=["TRUE", "EARLY", "BOTH"], group="Confirm • PP")
@@ -710,8 +713,52 @@ bool ema_bias_ok_sell = not use_ema_bias_confirm or ema_fast < ema_slow
 float macd = ta.ema(close, 12) - ta.ema(close, 26)
 float signal = ta.ema(macd, 9)
 float rsi = ta.rsi(close, 14)
-bool osc_ok_buy = not use_osc_confirm or (macd > signal and rsi > 50)
-bool osc_ok_sell = not use_osc_confirm or (macd < signal and rsi < 50)
+float div_pl = ta.pivotlow(low, div_left_bars, div_right_bars)
+float div_ph = ta.pivothigh(high, div_left_bars, div_right_bars)
+var float div_prev_price_low = na
+var float div_last_price_low = na
+var float div_prev_rsi_low = na
+var float div_last_rsi_low = na
+var float div_prev_macd_low = na
+var float div_last_macd_low = na
+var int div_prev_low_bar = na
+var int div_last_low_bar = na
+var float div_prev_price_high = na
+var float div_last_price_high = na
+var float div_prev_rsi_high = na
+var float div_last_rsi_high = na
+var float div_prev_macd_high = na
+var float div_last_macd_high = na
+var int div_prev_high_bar = na
+var int div_last_high_bar = na
+if not na(div_pl)
+    div_prev_price_low := div_last_price_low
+    div_prev_rsi_low := div_last_rsi_low
+    div_prev_macd_low := div_last_macd_low
+    div_prev_low_bar := div_last_low_bar
+    div_last_price_low := div_pl
+    div_last_rsi_low := rsi[div_right_bars]
+    div_last_macd_low := macd[div_right_bars]
+    div_last_low_bar := bar_index - div_right_bars
+if not na(div_ph)
+    div_prev_price_high := div_last_price_high
+    div_prev_rsi_high := div_last_rsi_high
+    div_prev_macd_high := div_last_macd_high
+    div_prev_high_bar := div_last_high_bar
+    div_last_price_high := div_ph
+    div_last_rsi_high := rsi[div_right_bars]
+    div_last_macd_high := macd[div_right_bars]
+    div_last_high_bar := bar_index - div_right_bars
+bool div_bars_ok_low = not na(div_prev_low_bar) and not na(div_last_low_bar) and div_last_low_bar - div_prev_low_bar <= div_lookback_bars
+bool div_bars_ok_high = not na(div_prev_high_bar) and not na(div_last_high_bar) and div_last_high_bar - div_prev_high_bar <= div_lookback_bars
+bool bull_div_rsi = div_bars_ok_low and div_last_price_low < div_prev_price_low and div_last_rsi_low > div_prev_rsi_low
+bool bull_div_macd = div_bars_ok_low and div_last_price_low < div_prev_price_low and div_last_macd_low > div_prev_macd_low
+bool bear_div_rsi = div_bars_ok_high and div_last_price_high > div_prev_price_high and div_last_rsi_high < div_prev_rsi_high
+bool bear_div_macd = div_bars_ok_high and div_last_price_high > div_prev_price_high and div_last_macd_high < div_prev_macd_high
+bool div_ok_buy = bull_div_rsi or bull_div_macd
+bool div_ok_sell = bear_div_rsi or bear_div_macd
+bool osc_ok_buy = osc_mode == "OFF" ? true : osc_mode == "SIMPLE" ? (macd > signal and rsi > 50) : div_ok_buy
+bool osc_ok_sell = osc_mode == "OFF" ? true : osc_mode == "SIMPLE" ? (macd < signal and rsi < 50) : div_ok_sell
 
 bool pp_true_buy_ok = pp_true_buy_state > 0
 bool pp_true_sell_ok = pp_true_sell_state > 0
@@ -866,6 +913,8 @@ var string prev_stage_buy = STAGE_FAR
 var string prev_stage_sell = STAGE_FAR
 var bool prev_blocked_buy = false
 var bool prev_blocked_sell = false
+var bool prev_div_ok_buy = false
+var bool prev_div_ok_sell = false
 
 bool buy_stage_transition = stage_buy != prev_stage_buy
 bool sell_stage_transition = stage_sell != prev_stage_sell
@@ -881,6 +930,11 @@ bool confirm_ready_buy_edge = buy_stage_transition and stage_buy == STAGE_CONFIR
 bool confirm_ready_sell_edge = sell_stage_transition and stage_sell == STAGE_CONFIRM_READY
 bool entry_buy_sig = buy_stage_transition and stage_buy == STAGE_ENTRY
 bool entry_sell_sig = sell_stage_transition and stage_sell == STAGE_ENTRY
+bool div_enabled = osc_mode == "DIVERGENCE"
+bool div_ok_buy_edge = div_enabled and has_buy and osc_ok_buy and not prev_div_ok_buy
+bool div_fail_buy_edge = div_enabled and has_buy and not osc_ok_buy and prev_div_ok_buy
+bool div_ok_sell_edge = div_enabled and has_sell and osc_ok_sell and not prev_div_ok_sell
+bool div_fail_sell_edge = div_enabled and has_sell and not osc_ok_sell and prev_div_ok_sell
 
 if show_labels_eff and near_buy_edge
     f_push_icon("⏳ BUY", color.new(color.green, 30), false)
@@ -994,7 +1048,7 @@ if draw_now and barstate.islast and show_hud
     table.cell(hud, 0, 4, ui_clean ? "Mode" : "Legend", text_color=color.white)
     table.cell(hud, 1, 4, ui_clean ? "CLEAN" : "⏳ near ⚡ zone ✅ confirm ▲▼ entry ⛔ blocked", text_color=color.silver)
     table.cell(hud, 2, 4, (ui_full or ui_debug) ? (icons_budget_disabled ? "icons disabled (budget)" : "icons: " + str.tostring(icon_keep_eff) + "/" + str.tostring(icon_keep)) : "", text_color=color.silver)
-    table.cell(hud, 6, 4, (ui_full or ui_debug) ? "PP uses confirmed pivots (delayed)" : "", text_color=color.silver)
+    table.cell(hud, 6, 4, (ui_full or ui_debug) ? "PP/DIV use confirmed pivots (delayed)" : "", text_color=color.silver)
 
 
 type Event
@@ -1045,6 +1099,14 @@ if blocked_buy_edge
     f_event_push("BUY", "blocked", block_reason_buy)
 if blocked_sell_edge
     f_event_push("SELL", "blocked", block_reason_sell)
+if div_ok_buy_edge
+    f_event_push("BUY", "DIV_OK", "bullish divergence confirmed")
+if div_fail_buy_edge
+    f_event_push("BUY", "DIV_FAIL", "bullish divergence missing")
+if div_ok_sell_edge
+    f_event_push("SELL", "DIV_OK", "bearish divergence confirmed")
+if div_fail_sell_edge
+    f_event_push("SELL", "DIV_FAIL", "bearish divergence missing")
 
 f_event_prune()
 
@@ -1065,3 +1127,5 @@ prev_stage_buy := stage_buy
 prev_stage_sell := stage_sell
 prev_blocked_buy := blocked_buy
 prev_blocked_sell := blocked_sell
+prev_div_ok_buy := div_enabled and has_buy and osc_ok_buy
+prev_div_ok_sell := div_enabled and has_sell and osc_ok_sell
