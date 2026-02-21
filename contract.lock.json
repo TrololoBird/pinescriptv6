@@ -8,8 +8,8 @@
     ]
   },
   "inputs": {
-    "count": 58,
-    "sha256": "53bd7970d26d4a9f7777eda8178540039db9310b0a6ce627fe5bb220ab6900df",
+    "count": 61,
+    "sha256": "ebeac13f07b8951ced3dd00b0410bc3e1c44dab455d191feebcf568bf50e134d",
     "lines": [
       "mode_tf = input.string(\"AUTO\", \"TF mode\", options=[\"AUTO\", \"MANUAL\"], group=\"TF Hierarchy\")",
       "manual_htf1 = input.timeframe(\"240\", \"Manual HTF1\", group=\"TF Hierarchy\")",
@@ -43,6 +43,7 @@
       "use_rr_gate = input.bool(true, \"Use RR gate\", group=\"Stages\")",
       "rr_min = input.float(1.8, \"Min RR\", minval=0.5, step=0.1, group=\"Stages\")",
       "entry_plan_mode = input.string(\"POC\", \"Entry plan mode\", options=[\"POC\", \"ZONE_EDGE\"], group=\"Stages\")",
+      "trigger_mode = input.string(\"STRICT_SWING\", \"Trigger mode\", options=[\"LEGACY_MAX\", \"STRICT_SWING\"], group=\"Stages\")",
       "stop_pad_atr_mult = input.float(0.1, \"Stop pad ATR mult\", minval=0.0, step=0.05, group=\"Stages\")",
       "stop_pad_pct = input.float(0.5, \"Stop pad %\", minval=0.0, step=0.1, group=\"Stages\")",
       "stop_mode = input.string(\"BASE\", \"Stop mode\", options=[\"BASE\", \"STOPVOL_NEAR\"], group=\"Stages\")",
@@ -65,6 +66,8 @@
       "stopvol_range_atr_mult = input.float(1.25, \"Stop-volume range <= ATR *\", minval=0.2, step=0.05, group=\"Stop Volume\")",
       "stopvol_vol_mult = input.float(1.5, \"Stop-volume vol >= MA *\", minval=0.5, step=0.1, group=\"Stop Volume\")",
       "show_hud = input.bool(true, \"Show HUD\", group=\"Visual\")",
+      "ui_mode = input.string(\"STANDARD\", \"UI mode\", options=[\"CLEAN\", \"STANDARD\", \"FULL\", \"DEBUG\"], group=\"Visual\")",
+      "render_mode = input.string(\"LAST_BAR_ONLY\", \"Render mode\", options=[\"HISTORY\", \"LAST_BAR_ONLY\"], group=\"Visual\")",
       "show_labels = input.bool(true, \"Show stage icons\", group=\"Visual\")",
       "show_rr_lines = input.bool(true, \"Show entry/stop/tp lines\", group=\"Visual\")",
       "icon_keep = input.int(90, \"Icons keep\", minval=20, maxval=250, group=\"Visual\")",

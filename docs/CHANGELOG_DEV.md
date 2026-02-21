@@ -423,3 +423,29 @@ Verification run:
   - updated trap input caption from `Trap max bars (zone TF)` to `Trap max bars` to match implementation.
 - Interface note:
   - RELEASE contract intentionally changed due input caption update; lock refreshed via `python tools/contract_guard.py --init`.
+
+## 2026-02-21 — P1 package: strict trigger, label budget safety, render/ui modes, audit trail
+
+- Added trigger decoupling via new Stage input `trigger_mode` (`LEGACY_MAX` / `STRICT_SWING`, default `STRICT_SWING`):
+  - STRICT mode now uses pure LTF swing trigger (`ltf_trig_up`/`ltf_trig_dn`) and validates it against entry plan with epsilon guard (`BUY > entry+EPS`, `SELL < entry-EPS`).
+  - Legacy mode preserves prior max/min-composed trigger behavior for backward compatibility.
+- Updated ENTRY trigger gating and HUD semantics:
+  - `entry_trigger_ok_*` now depends on trigger validity,
+  - HUD module row now includes explicit `TRIG:OK/BAD`,
+  - WAIT/BLOCK text now shows `TRIG BAD` when trigger shape is invalid.
+- Added internal label-budget protection for event icons:
+  - `zone_labels`, `allowed_icons`, and effective `icon_keep_eff` are computed each bar,
+  - icon pruning now enforces `icon_keep_eff` (protecting room for zone/active labels).
+- Added `render_mode` (`HISTORY` / `LAST_BAR_ONLY`, default `LAST_BAR_ONLY`) to reduce visual churn:
+  - style/text refresh loop for zone objects runs only on last bar in `LAST_BAR_ONLY`,
+  - lifecycle/state transitions are unchanged.
+- Removed duplicate `label.set_text` write in lifecycle path (retained single render/update path).
+- Added `ui_mode` (`CLEAN` / `STANDARD` / `FULL` / `DEBUG`) as top-level visual profile:
+  - CLEAN: suppresses stage icons and RR plot lines,
+  - STANDARD: keeps zones + stage icons, no consumed history,
+  - FULL/DEBUG: enables RR lines and consumed history toggle behavior.
+- Added bounded audit trail table (last 10 events, bottom-right) for explainability in FULL/DEBUG:
+  - event stream includes zone lifecycle edges and stage/blocked edges.
+- Interface note:
+  - RELEASE contract intentionally changed due new inputs (`trigger_mode`, `ui_mode`, `render_mode`);
+  - lock refreshed with `python tools/contract_guard.py --init`.

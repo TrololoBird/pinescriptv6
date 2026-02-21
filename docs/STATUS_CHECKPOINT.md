@@ -72,3 +72,47 @@
   3. STOPVOL origin currently tagged by heuristic, while zones are created from base edges instead of stop edges.
   4. Zone age/flip windows are based on time-delta (`tf_ms`) and can drift across session/weekend gaps.
   5. Trap type2 mixes chart-TF range with LTF ATR while input text says zone-TF behavior.
+
+## 2026-02-21T01:48:13Z — Phase 0 quick confirmation before P1
+- Audited canonical file: `prizrak_trade_setup_detector_v12_0_0.pine` (indicator title: `v12.2.0`).
+- Baseline command results:
+  - `python tools/contract_guard.py --mode release --check` → PASS.
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Quick grep confirmations (P0 invariants):
+  - `wick_touch` and close-in-zone predicates are present (`close >= ... <= ...`).
+  - RR line uses directional ratio `buy_reward / buy_risk` (without `abs` in RR computation).
+  - STOPVOL edges/fields (`htf1_stop_up`, STOPVOL-origin zones) are present.
+  - TF counters (`z_tf_seq`, `z_break_seq`) are present.
+  - Trap range uses zone-TF values (`htf1_trap_range`/`htf2_trap_range`).
+- Metrics snapshot:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → `962` lines.
+  - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → `4` (within limit <= 6).
+  - Indicator caps currently `max_boxes_count=300`, `max_labels_count=300`.
+- Planned P1 implementation scope:
+  1. P1.1 strict trigger decoupling (`trigger_mode`) + explicit HUD TRIG status.
+  2. P1.2 label budget safety for event icons (`icon_keep_eff`, HUD eff/req).
+  3. P1.3 render mode (`HISTORY`/`LAST_BAR_ONLY`) and remove duplicate `label.set_text` writes.
+  4. P1.4 audit trail events table (bounded recent events).
+  5. P1.5 `ui_mode` mapping (CLEAN/STANDARD/FULL/DEBUG) without touching lifecycle logic.
+
+## 2026-02-21T01:51:09Z — Post P1.1–P1.5 implementation
+- Updated canonical file: `prizrak_trade_setup_detector_v12_0_0.pine`.
+- Final metrics:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → `1068` lines.
+  - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → `4` (within limit <= 6).
+  - Indicator object caps unchanged: `max_boxes_count=300`, `max_labels_count=300`.
+- Implemented in this pass:
+  1. STRICT trigger mode (separated trigger-level semantics from entry plan).
+  2. Label budget safety (`icon_keep_eff`) + HUD icons budget visibility.
+  3. Render mode for last-bar-only visual refresh + duplicate label text update removed.
+  4. Audit trail table (bounded recent events) for explainability.
+  5. UI mode profiles (CLEAN/STANDARD/FULL/DEBUG) as top-level visual presets.
+- Contract/status:
+  - RELEASE contract intentionally updated (`trigger_mode`, `ui_mode`, `render_mode`) and lock refreshed via `python tools/contract_guard.py --init`.
+- Validation snapshot:
+  - `python tools/contract_guard.py --mode release --check` → PASS.
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
