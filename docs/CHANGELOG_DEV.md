@@ -477,3 +477,9 @@ Verification run:
 - Event icon budget is pruned every bar, and CLEAN / labels-off modes enforce full icon cleanup; budget exhaustion is surfaced as `icons disabled (budget)`.
 - `render_mode=LAST_BAR_ONLY` now gates visual mutation paths (zone visuals, active labels, HUD, audit table) while lifecycle/state logic remains ungated.
 - HUD now discloses PP confirmation behavior: `PP uses confirmed pivots (delayed)`.
+
+## 2026-02-21 — Refactor: Zone struct + event struct, no behavior change
+- Replaced parallel zone arrays with `type Zone` and `var Zone[] zones`.
+- Added zone helper functions: `f_zone_add`, `f_zone_remove`, `f_zone_update_visual`, `f_zone_update_lifecycle`, `f_zone_select_active`, `f_zone_prune_limits`.
+- Replaced audit parallel arrays with `type Event` + `var Event[] events` and helper functions `f_event_push` / `f_event_prune` / `f_event_render_row`.
+- Refactor-only pass intended to preserve existing logic/thresholds/TF behavior.
