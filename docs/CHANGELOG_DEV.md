@@ -1,5 +1,14 @@
 # DEV Changelog
 
+## 2026-02-21 — v12 touch semantics + block reason UX clarity
+
+- Added `touch_mode` input (`CLOSE`/`WICK`) in `prizrak_trade_setup_detector_v12_0_0.pine` to make zone entry/touch semantics explicit.
+- Unified zone-inside checks through `f_inside_zone(...)` and applied it in:
+  - zone lifecycle touch accounting,
+  - active BUY/SELL `in_zone` gate logic.
+- Improved block reason readability in stage UX (`RR<MIN`, `NO_PP`, `NO_TRAP`, `OSC_FAIL`, `EMA_BIAS`, `TRIG_BAD`).
+- HUD TF row now also displays active touch mode (`touch:CLOSE|WICK`) for traceability while debugging stage decisions.
+
 ## 2026-02-19 — v12 active-zone hysteresis + HUD bias source polish
 
 - Added active-zone anti-flicker hysteresis in `prizrak_trade_setup_detector_v12_0_0.pine`:

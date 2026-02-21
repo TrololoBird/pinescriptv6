@@ -27,6 +27,7 @@ show_consumed_history = input.bool(false, "Show consumed history", group="Zone E
 
 use_ltf_entry_gate = input.bool(true, "Use LTF entry gate", group="Zone Engine • LTF")
 ltf_gate_mode = input.string("NEAR", "LTF gate mode", options=["NEAR", "IN_ZONE"], group="Zone Engine • LTF")
+touch_mode = input.string("CLOSE", "Zone touch mode", options=["CLOSE", "WICK"], group="Zone Engine • LTF")
 ltf_near_atr = input.float(0.35, "LTF near ATR mult", minval=0.0, step=0.05, group="Zone Engine • LTF")
 ltf_poc_len = input.int(80, "LTF POC length", minval=20, maxval=500, group="Zone Engine • LTF")
 ltf_poc_bins = input.int(32, "LTF POC bins", minval=8, maxval=120, group="Zone Engine • LTF")
@@ -96,6 +97,7 @@ int MAX_LABELS_BUDGET = 300
 
 f_tf_ms(string _tf) => int(timeframe.in_seconds(_tf) * 1000)
 f_clamp(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
+f_inside_zone(float _bot, float _top) => touch_mode == "WICK" ? (low <= _top and high >= _bot) : (close >= _bot and close <= _top)
 
 int tf_sec = timeframe.in_seconds()
 string auto_htf1 = tf_sec <= 15 * 60 ? "240" : tf_sec <= 60 * 60 ? "D" : "W"
@@ -463,7 +465,7 @@ f_zone_update_lifecycle(int i, bool _draw_now) =>
     float hhigh = z.tf == htf1 ? htf1_high : htf2_high
     float hlow = z.tf == htf1 ? htf1_low : htf2_low
 
-    bool inside = close >= z.bot and close <= z.top
+    bool inside = f_inside_zone(z.bot, z.top)
     if inside and not z.inside_prev and st <= Z_TOUCHED
         z.touch += 1
         z.status := Z_TOUCHED
@@ -708,8 +710,8 @@ string sell_origin = has_sell ? array.get(zones, sell_idx).origin : "-"
 
 bool buy_wick_touch = has_buy and high >= buy_bot and low <= buy_top
 bool sell_wick_touch = has_sell and high >= sell_bot and low <= sell_top
-bool buy_in_zone = has_buy and close >= buy_bot and close <= buy_top
-bool sell_in_zone = has_sell and close >= sell_bot and close <= sell_top
+bool buy_in_zone = has_buy and f_inside_zone(buy_bot, buy_top)
+bool sell_in_zone = has_sell and f_inside_zone(sell_bot, sell_top)
 bool buy_near = has_buy and buy_dist <= near_thr_atr * buy_atr
 bool sell_near = has_sell and sell_dist <= near_thr_atr * sell_atr
 bool ltf_gate_ok_buy = has_buy and (not use_ltf_entry_gate or (ltf_gate_mode == "IN_ZONE" ? buy_in_zone : buy_near or (buy_dist <= ltf_near_atr * ltf_atr)))
@@ -893,8 +895,8 @@ bool blocked_filters_buy = has_buy and buy_in_zone and ltf_gate_ok_buy and not a
 bool blocked_filters_sell = has_sell and sell_in_zone and ltf_gate_ok_sell and not all_filters_ok_sell
 bool wait_trig_buy = has_buy and buy_in_zone and ltf_gate_ok_buy and all_filters_ok_buy and (not trig_valid_buy or not entry_trigger_ok_buy)
 bool wait_trig_sell = has_sell and sell_in_zone and ltf_gate_ok_sell and all_filters_ok_sell and (not trig_valid_sell or not entry_trigger_ok_sell)
-string block_reason_buy = blocked_filters_buy ? ((not rr_ok_buy ? "RR " : "") + (not pp_ok_buy ? "PP " : "") + (not trap_ok_buy ? "TRAP " : "") + (not osc_ok_buy ? "OSC " : "") + (not ema_bias_ok_buy ? "EMA" : "") + (not trig_valid_buy ? "TRIG" : "")) : ""
-string block_reason_sell = blocked_filters_sell ? ((not rr_ok_sell ? "RR " : "") + (not pp_ok_sell ? "PP " : "") + (not trap_ok_sell ? "TRAP " : "") + (not osc_ok_sell ? "OSC " : "") + (not ema_bias_ok_sell ? "EMA" : "") + (not trig_valid_sell ? "TRIG" : "")) : ""
+string block_reason_buy = blocked_filters_buy ? ((not rr_ok_buy ? "RR<MIN; " : "") + (not pp_ok_buy ? "NO_PP; " : "") + (not trap_ok_buy ? "NO_TRAP; " : "") + (not osc_ok_buy ? "OSC_FAIL; " : "") + (not ema_bias_ok_buy ? "EMA_BIAS; " : "") + (not trig_valid_buy ? "TRIG_BAD; " : "")) : ""
+string block_reason_sell = blocked_filters_sell ? ((not rr_ok_sell ? "RR<MIN; " : "") + (not pp_ok_sell ? "NO_PP; " : "") + (not trap_ok_sell ? "NO_TRAP; " : "") + (not osc_ok_sell ? "OSC_FAIL; " : "") + (not ema_bias_ok_sell ? "EMA_BIAS; " : "") + (not trig_valid_sell ? "TRIG_BAD; " : "")) : ""
 bool blocked_buy = blocked_filters_buy
 bool blocked_sell = blocked_filters_sell
 
@@ -1067,7 +1069,7 @@ if draw_now and barstate.islast and show_hud
     table.cell(hud, 4, 2, "TRIG:" + (trig_valid_sell ? "OK" : "BAD") + " RR:" + (has_sell and not na(rr_sell) ? str.tostring(rr_sell, format.mintick) : "n/a") + " PP:" + pp_state_sell + " T/O/L:" + (trap_ok_sell ? "OK" : "BAD") + "/" + (osc_ok_sell ? "OK" : "BAD") + "/" + (ltf_gate_ok_sell ? "OK" : "BAD") + (has_sell ? "\n" + sell_tp_source : "") + (has_sell and flip_on_break and sell_idx >= 0 and array.get(zones, sell_idx).status == Z_INVALID and not na(array.get(zones, sell_idx).break_seq) ? "\nScenario: flip retest window " + str.tostring(flip_retest_bars) + " bars" : ""), text_color=color.silver)
     table.cell(hud, 5, 2, has_sell ? array.get(zones, sell_idx).tf + "/" + sell_origin : "-", text_color=color.white)
     table.cell(hud, 0, 3, "TF", text_color=color.white)
-    table.cell(hud, 1, 3, htf1 + "/" + htf2 + "/" + ltf + " ui:" + ui_mode, text_color=color.silver)
+    table.cell(hud, 1, 3, htf1 + "/" + htf2 + "/" + ltf + " ui:" + ui_mode + " touch:" + touch_mode, text_color=color.silver)
     table.cell(hud, 0, 4, ui_clean ? "Mode" : "Legend", text_color=color.white)
     table.cell(hud, 1, 4, ui_clean ? "CLEAN" : "⏳ near ⚡ zone ✅ confirm ▲▼ entry ⛔ blocked", text_color=color.silver)
     table.cell(hud, 2, 4, (ui_full or ui_debug) ? (icons_budget_disabled ? "icons disabled (budget)" : "icons: " + str.tostring(icon_keep_eff) + "/" + str.tostring(icon_keep)) : "", text_color=color.silver)
