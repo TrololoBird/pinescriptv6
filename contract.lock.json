@@ -9,7 +9,7 @@
   },
   "inputs": {
     "count": 58,
-    "sha256": "db26f9c93e2240a2b1a5ed6243d6535d3e6467974957dfeb000584685ceabbfd",
+    "sha256": "53bd7970d26d4a9f7777eda8178540039db9310b0a6ce627fe5bb220ab6900df",
     "lines": [
       "mode_tf = input.string(\"AUTO\", \"TF mode\", options=[\"AUTO\", \"MANUAL\"], group=\"TF Hierarchy\")",
       "manual_htf1 = input.timeframe(\"240\", \"Manual HTF1\", group=\"TF Hierarchy\")",
@@ -56,7 +56,7 @@
       "pp_tf = input.timeframe(\"\", \"PP timeframe (blank = LTF)\", group=\"Confirm • PP\")",
       "pp_confirm_closes = input.int(2, \"PP confirm closes\", minval=2, maxval=3, group=\"Confirm • PP\")",
       "pp_retest_window = input.int(8, \"PP retest window\", minval=2, maxval=30, group=\"Confirm • PP\")",
-      "trap_max_bars = input.int(6, \"Trap max bars (zone TF)\", minval=1, maxval=20, group=\"Trap\")",
+      "trap_max_bars = input.int(6, \"Trap max bars\", minval=1, maxval=20, group=\"Trap\")",
       "trap_use_volume_gate = input.bool(false, \"Trap volume gate (zone TF volume)\", group=\"Trap\")",
       "trap_return_volume_mult = input.float(1.1, \"Trap return volume mult\", minval=0.5, step=0.1, group=\"Trap\")",
       "stopvol_enabled = input.bool(true, \"Enable stop-volume origin\", group=\"Stop Volume\")",
