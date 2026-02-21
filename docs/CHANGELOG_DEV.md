@@ -469,3 +469,11 @@ Verification run:
   - zone lifecycle/state transitions are unchanged.
 - Interface note:
   - input captions changed intentionally; RELEASE lock refreshed with `python tools/contract_guard.py --init`.
+
+## 2026-02-21 — Stability pass
+- Stability pass: strict trigger anti-shift, trap volume semantics, label budget prune, render_mode last-bar gating, PP pivot disclosure.
+- STRICT_SWING trigger now blocks shift-only level drift unless price actually crossed trigger; HUD distinguishes `TRIG BAD` vs `TRIG SHIFT`.
+- Trap return-volume confirmation explicitly uses `volume <= zone_tf_vol_ma * trap_return_volume_mult` on the event TF pack.
+- Event icon budget is pruned every bar, and CLEAN / labels-off modes enforce full icon cleanup; budget exhaustion is surfaced as `icons disabled (budget)`.
+- `render_mode=LAST_BAR_ONLY` now gates visual mutation paths (zone visuals, active labels, HUD, audit table) while lifecycle/state logic remains ungated.
+- HUD now discloses PP confirmation behavior: `PP uses confirmed pivots (delayed)`.

@@ -846,14 +846,20 @@ bool trig_valid_buy = trigger_mode == "LEGACY_MAX" ? has_buy and not na(buy_trig
 bool trig_valid_sell = trigger_mode == "LEGACY_MAX" ? has_sell and not na(sell_trig_level_legacy) : has_sell and not na(sell_trig_level_strict) and not na(sell_entry_plan) and sell_trig_level_strict < sell_entry_plan - EPS
 float buy_trig_level = trigger_mode == "LEGACY_MAX" ? buy_trig_level_legacy : (trig_valid_buy ? buy_trig_level_strict : na)
 float sell_trig_level = trigger_mode == "LEGACY_MAX" ? sell_trig_level_legacy : (trig_valid_sell ? sell_trig_level_strict : na)
-bool buy_level_stable_strict = trigger_mode != "STRICT_SWING" or (has_buy and not na(ltf_trig_up) and not na(ltf_trig_up[1]) and math.abs(ltf_trig_up - ltf_trig_up[1]) <= EPS)
-bool sell_level_stable_strict = trigger_mode != "STRICT_SWING" or (has_sell and not na(ltf_trig_dn) and not na(ltf_trig_dn[1]) and math.abs(ltf_trig_dn - ltf_trig_dn[1]) <= EPS)
+bool buy_trig_level_changed = trigger_mode == "STRICT_SWING" and has_buy and not na(ltf_trig_up) and not na(ltf_trig_up[1]) and math.abs(ltf_trig_up - ltf_trig_up[1]) > EPS
+bool sell_trig_level_changed = trigger_mode == "STRICT_SWING" and has_sell and not na(ltf_trig_dn) and not na(ltf_trig_dn[1]) and math.abs(ltf_trig_dn - ltf_trig_dn[1]) > EPS
+bool buy_trig_cross_old = has_buy and not na(ltf_close) and not na(ltf_close[1]) and not na(ltf_trig_up[1]) and ltf_close > ltf_trig_up[1] + EPS and ltf_close[1] <= ltf_trig_up[1] + EPS
+bool buy_trig_cross_new = has_buy and not na(ltf_close) and not na(ltf_close[1]) and not na(ltf_trig_up) and ltf_close > ltf_trig_up + EPS and ltf_close[1] <= ltf_trig_up + EPS
+bool sell_trig_cross_old = has_sell and not na(ltf_close) and not na(ltf_close[1]) and not na(ltf_trig_dn[1]) and ltf_close < ltf_trig_dn[1] - EPS and ltf_close[1] >= ltf_trig_dn[1] - EPS
+bool sell_trig_cross_new = has_sell and not na(ltf_close) and not na(ltf_close[1]) and not na(ltf_trig_dn) and ltf_close < ltf_trig_dn - EPS and ltf_close[1] >= ltf_trig_dn - EPS
+bool trig_level_stable_buy = trigger_mode != "STRICT_SWING" or not buy_trig_level_changed or buy_trig_cross_old or buy_trig_cross_new
+bool trig_level_stable_sell = trigger_mode != "STRICT_SWING" or not sell_trig_level_changed or sell_trig_cross_old or sell_trig_cross_new
 bool buy_level_changed = trigger_mode == "LEGACY_MAX" and has_buy and not na(buy_trig_level) and not na(buy_trig_level[1]) and math.abs(buy_trig_level - buy_trig_level[1]) > EPS
 bool sell_level_changed = trigger_mode == "LEGACY_MAX" and has_sell and not na(sell_trig_level) and not na(sell_trig_level[1]) and math.abs(sell_trig_level - sell_trig_level[1]) > EPS
-bool entry_trigger_ok_buy = trig_valid_buy and buy_level_stable_strict and not buy_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(buy_trig_level) and not na(buy_trig_level[1]) and ltf_close > buy_trig_level + EPS and ltf_close[1] <= buy_trig_level[1] + EPS
-bool entry_trigger_ok_sell = trig_valid_sell and sell_level_stable_strict and not sell_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(sell_trig_level) and not na(sell_trig_level[1]) and ltf_close < sell_trig_level - EPS and ltf_close[1] >= sell_trig_level[1] - EPS
-bool trig_shift_buy = trig_valid_buy and not buy_level_stable_strict
-bool trig_shift_sell = trig_valid_sell and not sell_level_stable_strict
+bool entry_trigger_ok_buy = trig_valid_buy and trig_level_stable_buy and not buy_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(buy_trig_level) and not na(buy_trig_level[1]) and ltf_close > buy_trig_level + EPS and ltf_close[1] <= buy_trig_level[1] + EPS
+bool entry_trigger_ok_sell = trig_valid_sell and trig_level_stable_sell and not sell_level_changed and not na(ltf_close) and not na(ltf_close[1]) and not na(sell_trig_level) and not na(sell_trig_level[1]) and ltf_close < sell_trig_level - EPS and ltf_close[1] >= sell_trig_level[1] - EPS
+bool trig_shift_buy = trigger_mode == "STRICT_SWING" and trig_valid_buy and buy_trig_level_changed and not buy_trig_cross_old and not buy_trig_cross_new
+bool trig_shift_sell = trigger_mode == "STRICT_SWING" and trig_valid_sell and sell_trig_level_changed and not sell_trig_cross_old and not sell_trig_cross_new
 
 bool all_filters_ok_buy = rr_ok_buy and pp_ok_buy and trap_ok_buy and osc_ok_buy and ema_bias_ok_buy
 bool all_filters_ok_sell = rr_ok_sell and pp_ok_sell and trap_ok_sell and osc_ok_sell and ema_bias_ok_sell
@@ -970,7 +976,7 @@ plot(show_rr_lines_eff and has_sell ? sell_tp : na, "SELL tp", color=color.new(c
 
 var label active_buy_label = na
 var label active_sell_label = na
-if barstate.islast
+if draw_now and barstate.islast
     if na(active_buy_label)
         active_buy_label := label.new(time, high, "", xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.new(color.lime, 0), color=color.new(color.black, 80), size=size.tiny)
     if na(active_sell_label)
@@ -1002,7 +1008,7 @@ alertcondition(trap_buy_event, "trap_event_buy", "Trap event BUY")
 alertcondition(trap_sell_event, "trap_event_sell", "Trap event SELL")
 
 var table hud = table.new(position.top_right, 7, 5, bgcolor=color.new(color.black, 80))
-if barstate.islast and show_hud
+if draw_now and barstate.islast and show_hud
     table.cell(hud, 0, 0, "SIDE", text_color=color.white)
     table.cell(hud, 1, 0, "ZONE", text_color=color.white)
     table.cell(hud, 2, 0, "STAGE", text_color=color.white)
@@ -1027,6 +1033,7 @@ if barstate.islast and show_hud
     table.cell(hud, 0, 4, ui_clean ? "Mode" : "Legend", text_color=color.white)
     table.cell(hud, 1, 4, ui_clean ? "CLEAN" : "⏳ near ⚡ zone ✅ confirm ▲▼ entry ⛔ blocked", text_color=color.silver)
     table.cell(hud, 2, 4, (ui_full or ui_debug) ? (icons_budget_disabled ? "icons disabled (budget)" : "icons: " + str.tostring(icon_keep_eff) + "/" + str.tostring(icon_keep)) : "", text_color=color.silver)
+    table.cell(hud, 6, 4, (ui_full or ui_debug) ? "PP uses confirmed pivots (delayed)" : "", text_color=color.silver)
 
 
 var string[] audit_times = array.new_string()
@@ -1070,7 +1077,7 @@ if blocked_sell_edge
     f_push_audit("blocked_sell:" + block_reason_sell)
 
 var table audit_tbl = table.new(position.bottom_right, 2, 11, bgcolor=color.new(color.black, 85))
-if barstate.islast and show_hud and (ui_full or ui_debug)
+if draw_now and barstate.islast and show_hud and (ui_full or ui_debug)
     table.cell(audit_tbl, 0, 0, "TIME", text_color=color.white)
     table.cell(audit_tbl, 1, 0, "EVENT", text_color=color.white)
     for r = 1 to 10

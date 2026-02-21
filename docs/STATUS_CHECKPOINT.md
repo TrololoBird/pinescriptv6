@@ -144,3 +144,34 @@
 - Snapshot after edits:
   - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → `1086`
   - counts: `inputs=61`, `alerts=18`, `request.security=4` (still <= 6).
+
+## 2026-02-21T08:12:40Z — Product stability pass (A–E)
+- Baseline re-check before edits:
+  - `python tools/contract_guard.py --mode release --check` → PASS.
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Implemented fixes in `prizrak_trade_setup_detector_v12_0_0.pine`:
+  1. STRICT trigger anti-shift hardening: introduced `trig_level_stable_buy/sell` semantics via shift-detection + explicit cross acceptance (`old`/`new` trigger cross) so shift-only updates no longer pass entry gates.
+  2. ENTRY gates now require anti-shift stability in STRICT_SWING while preserving LEGACY_MAX behavior.
+  3. HUD states keep explicit differentiation between `TRIG BAD` and `TRIG SHIFT`.
+  4. Trap return volume gate remains `<=` and is sourced from event TF (`htf*_vol_ma` from security pack), not from LTF-stepped reconstruction.
+  5. Label budget pruning enforced every bar; CLEAN / labels-off paths clear icon arrays entirely.
+  6. LAST_BAR_ONLY visual gating expanded to active labels + HUD + audit table (`draw_now`), lifecycle logic remains outside visual gate.
+  7. PP UX disclosure added: `PP uses confirmed pivots (delayed)`.
+- Post-edit validation:
+  - `python tools/contract_guard.py --mode release --check` → PASS.
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Metrics snapshot after edits:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → 1097.
+  - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → 4.
+  - Interface counts unchanged (`inputs=61`, `alerts=18`).
+
+## 2026-02-21T08:16:05Z — Metrics correction
+- Re-counted post-edit file metrics after final linted save:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → 1093.
+  - `rg -c "request.security" prizrak_trade_setup_detector_v12_0_0.pine` → 4.
+  - `rg -c "^.*input\\." prizrak_trade_setup_detector_v12_0_0.pine` → 61.
+  - `rg -c "^alertcondition\\(" prizrak_trade_setup_detector_v12_0_0.pine` → 18.
