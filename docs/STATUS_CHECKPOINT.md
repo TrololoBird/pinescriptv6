@@ -116,3 +116,31 @@
   - `python tools/lint_guard.py` → PASS.
   - `make check-release` → PASS.
   - `make tv-export` → PASS.
+
+## 2026-02-21T07:07:15Z — Phase 0 baseline before P1.6/P1.7 cycle
+- Baseline commands (no edits):
+  - `python tools/contract_guard.py --mode release --check` → PASS.
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Snapshot before edits:
+  - commit: `2887900`
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → `1088`
+  - counts: `inputs=61`, `alerts=18`, `request.security=4`
+- Scope for this PR:
+  - fix TRAP return-volume gate semantics to match return event intent;
+  - add STRICT_SWING trigger-level stability guard and explicit HUD “TRIG SHIFT” state;
+  - harden icon budget enforcement and CLEAN-mode icon cleanup;
+  - make `render_mode=LAST_BAR_ONLY` affect only visual updates (`box.set_right`) without touching lifecycle.
+
+## 2026-02-21T07:07:15Z — Post P1.6/P1.7 implementation checkpoint
+- Validation commands:
+  - `python tools/lint_guard.py` → PASS.
+  - `make check-release` → PASS.
+  - `make tv-export` → PASS.
+- Contract status:
+  - RELEASE contract intentionally updated (Trap input captions clarified);
+  - lock refreshed via `python tools/contract_guard.py --init`.
+- Snapshot after edits:
+  - `wc -l prizrak_trade_setup_detector_v12_0_0.pine` → `1086`
+  - counts: `inputs=61`, `alerts=18`, `request.security=4` (still <= 6).

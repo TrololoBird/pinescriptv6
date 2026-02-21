@@ -449,3 +449,23 @@ Verification run:
 - Interface note:
   - RELEASE contract intentionally changed due new inputs (`trigger_mode`, `ui_mode`, `render_mode`);
   - lock refreshed with `python tools/contract_guard.py --init`.
+
+## 2026-02-21 — P1.6/P1.7 safety pass: trap volume semantics, strict trigger stability, icon budget cleanup, honest LAST_BAR_ONLY
+
+- TRAP volume gate semantics fixed for return event logic:
+  - `trap_use_volume_gate`/`trap_return_volume_mult` captions clarified to explicitly state return-volume check semantics (`vol <= MA * mult`),
+  - `trap_vol_ok_buy/sell` now use `<=` instead of `>=` so low-volume return confirms trap behavior as intended.
+- STRICT_SWING false ENTRY protection:
+  - added strict trigger level stability guards (`buy_level_stable_strict` / `sell_level_stable_strict`) based on `ltf_trig_*` delta vs `EPS`,
+  - included stability guards into `entry_trigger_ok_*` so trigger-line shifts alone cannot emit ENTRY,
+  - HUD wait state now prints `TRIG SHIFT` when trigger is valid but unstable.
+- Label-budget and UI cleanup hardening:
+  - added `icons_budget_disabled` and tied `show_labels_eff` to budget availability,
+  - when CLEAN mode (or labels effectively off), all queued event icons are actively deleted and array-cleared,
+  - added end-of-bar enforcement loop to trim `event_icons` down to `icon_keep_eff` even without new pushes,
+  - HUD now shows `icons disabled (budget)` when icon budget is zero.
+- Render-mode honesty:
+  - `box.set_right(...)` update is now wrapped by `draw_now`, so in `LAST_BAR_ONLY` only last-bar visual extension occurs;
+  - zone lifecycle/state transitions are unchanged.
+- Interface note:
+  - input captions changed intentionally; RELEASE lock refreshed with `python tools/contract_guard.py --init`.
