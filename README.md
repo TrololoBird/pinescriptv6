@@ -1,82 +1,31 @@
-# Pine Script v6 Reference for LLMs
+# Prizrak Trade Setup Detector — v12
 
-**Current Version:** v6  
-**Source:** [TradingView Pine Script™ v6 Reference Manual](https://www.tradingview.com/pine-script-reference/v6/) & [Welcome to Pine Script® v6](https://www.tradingview.com/pine-script-docs/welcome/)
+Репозиторий переведён на **ветку v12** и очищен от legacy-артефактов v11.
 
-## 🤖 What is this?
-This repository contains the official Pine Script v6 documentation, restructured and "chunked" specifically for Large Language Models (LLMs).
+## Основной файл
+- `prizrak_trade_setup_detector_v12_0_0.pine` — каноничный Pine-скрипт индикатора.
 
-The official documentation is massive. Feeding the entire raw documentation into an LLM often confuses it or exceeds context limits, leading to hallucinations or generic v5 code. This repository breaks the documentation into logical, namespaced markdown files to improve **Retrieval Augmented Generation (RAG)** and **Context Window efficiency**.
+## Контракт интерфейса
+- `contract.lock.json` фиксирует публичный интерфейс (строка `indicator(...)`, `input.*`, `alertcondition(...)`).
+- Для локальной проверки в DEV-цикле: `make check-dev`.
+- Для релизного контроля: `make check-release`.
+- Для обновления lock-файла при намеренном изменении интерфейса: `make contract-init`.
 
----
+## Документация v12
+- `ARCHITECTURE_V12.md` — архитектура и ключевые подсистемы.
+- `API_INPUTS_V12.md` — каталог входных параметров.
+- `TROUBLESHOOTING_V12.md` — FAQ по диагностике и исправлениям.
+- `CHANGELOG.md` — структурированный журнал изменений.
+- `release_notes.md` — заметки по релизам.
 
-## 👨‍💻 For Humans: How to use this Repo
+## Быстрый старт
+1. Откройте `prizrak_trade_setup_detector_v12_0_0.pine` в TradingView Pine Editor.
+2. Скомпилируйте скрипт и примените к графику.
+3. Настройте параметры через группы `TF Hierarchy`, `Zone Engine`, `Stages`, `Visual`.
+4. Проверьте алерты по условиям `entry_*`, `near_*`, `zone_*`, `trap_*`.
 
-### Option 1: AI Code Editors (Cursor, Windsurf, Copilot)
-If you use AI-native editors like Cursor or Windsurf:
-1. Clone this repository locally.
-2. In your chat interface, reference specific documentation based on what you are building.
-   * *Building an indicator?* Reference [@functions/ta.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/ta.md) and [@functions/drawing.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/drawing.md).
-   * *Building a strategy?* Reference [@functions/strategy.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/strategy.md).
-   * *Getting errors?* Reference @concepts/common_errors.md.
-
-### Option 2: Claude Projects / Custom GPTs
-1. Download this repository as a ZIP.
-2. Upload the relevant files to your **[Claude Project Knowledge](https://support.claude.com/en/articles/9517075-what-are-projects)** ([YouTube Help Here](https://www.youtube.com/watch?v=GJ5jTgcbRHA)) or **[Custom GPT Knowledge](https://help.openai.com/en/articles/8843948-knowledge-in-gpts)**.
-3. *Recommendation:* Upload [LLM_MANIFEST.md](https://github.com/codenamedevan/pinescriptv6/blob/main/LLM_MANIFEST.md) and the specific [reference/](https://github.com/codenamedevan/pinescriptv6/tree/main/reference) folders you use most often.
-
----
-
-
-## 🧪 Development checks
-
-- `make check-dev` — DEV loop (fast): runs lint/static guards that do not enforce interface lock.
-- `make check` — PROD gate: runs contract lock check + lint guards.
-- `make contract-init` — regenerate `contract.lock.json` only when an intentional interface change is required.
-- Error prevention workflow for Pine warnings/regressions: `docs/ERROR_PREVENTION_CHECKLIST.md`.
-- DEV history of fixes and checks: `docs/CHANGELOG_DEV.md`.
-
-## 🧠 For LLMs: Usage Instructions
-
-**If you are an LLM or AI Assistant reading this file, follow these instructions:**
-
-1.  **Entry Point:** Always check [LLM_MANIFEST.md](https://github.com/codenamedevan/pinescriptv6/blob/main/LLM_MANIFEST.md) first. It acts as the map for this repository.
-2.  **Modular Retrieval:** Do not attempt to ingest the entire codebase at once.
-    * If the user asks about **Functions** (e.g., RSI, EMA), look in [reference/functions/ta.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/ta.md).
-    * If the user asks about **Backtesting**, look in [reference/functions/strategy.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/strategy.md).
-    * If the user asks about **Arrays or Matrices**, look in [reference/functions/collections.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/collections.md).
-3.  **Syntax Version:** Enforce //@version=6 in all code generation.
-4.  **No Hallucinations:** If a function is not found in these files, it likely does not exist in v6 or has been renamed. Do not invent syntax.
-
----
-
-## 📂 Repository Structure
-
-* **[LLM_MANIFEST.md](https://github.com/codenamedevan/pinescriptv6/blob/main/LLM_MANIFEST.md)**: The master index. Start here.
-* **[concepts/](https://github.com/codenamedevan/pinescriptv6/tree/main/concepts)**: Explanations of how the Pine engine works (Execution model, Timeframes).
-* **[reference/](https://github.com/codenamedevan/pinescriptv6/tree/main/reference)**: The strict API dictionary.
-    * [variables.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/variables.md): Built-ins (`open`, `close`, `syminfo`).
-    * [constants.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/constants.md): Fixed values (`color.red`).
-    * [functions/](https://github.com/codenamedevan/pinescriptv6/tree/main/reference/functions):
-        * [ta.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/ta.md): Technical Analysis.
-        * [strategy.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/strategy.md): Backtesting.
-        * [request.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/request.md): External data.
-        * [drawing.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/drawing.md): Visuals (`plot`, `line`, `box`).
-
----
-
-## 📋 Recommended System Prompt
-
-If you are building a Custom GPT or setting up a Project, use this prompt:
-
-> You are an expert Pine Script v6 Developer. You have access to a reference library structured into specific folders.
-> 
-> 1. When I ask for code, ALWAYS consult the [LLM_MANIFEST.md](https://github.com/codenamedevan/pinescriptv6/blob/main/LLM_MANIFEST.md) to locate the correct reference file.
-> 2. Prefer `ta.*` namespace functions over manual calculations.
-> 3. Ensure all scripts start with `//@version=6`.
-> 4. If I ask for a Strategy, strictly check [reference/functions/strategy.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/strategy.md) for the latest order placement syntax.
-> 5. If I ask for complex visuals, check [reference/functions/drawing.md](https://github.com/codenamedevan/pinescriptv6/blob/main/reference/functions/drawing.md) for `polyline` and `box` capabilities.
-
----
-
-*Disclaimer: This repository is a community-maintained restructuring of the official documentation designed for AI efficiency. It is not affiliated with TradingView.*
+## Проверки
+- `make check-dev`
+- `make check-release`
+- `make contract-dev`
+- `make contract-check`
