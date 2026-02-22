@@ -101,6 +101,12 @@ int BASE_BREAK_UP = 3
 int BASE_BREAK_DN = 4
 int MAX_CLEANUP_ITERATIONS = 16
 int MAX_LABELS_BUDGET = 300
+int BLOCK_RR = 0x01
+int BLOCK_PP = 0x02
+int BLOCK_TRAP = 0x04
+int BLOCK_OSC = 0x08
+int BLOCK_EMA = 0x10
+int BLOCK_TRIG_JUMP = 0x20
 float SWITCH_MARGIN_SCORE = 0.2
 int SWITCH_HOLD_BARS = 3
 float EPS = syminfo.mintick * 0.25
@@ -109,36 +115,44 @@ f_tf_ms(string _tf) => int(timeframe.in_seconds(_tf) * 1000)
 f_clamp(int v, int lo, int hi) => math.max(lo, math.min(hi, v))
 f_inside_zone(float _bot, float _top) => touch_mode == "WICK" ? (low <= _top and high >= _bot) : (close >= _bot and close <= _top)
 f_calculate_poc(float _lo, float _hi, int _bins, int _bars_cap, int _src_shift, string _mode) =>
+    int bins_safe = math.max(_bins, 1)
+    int bars_cap_safe = math.max(_bars_cap, 1)
+    float den_raw = _hi - _lo
+    float den = math.max(den_raw, syminfo.mintick)
+    float fallback_price = na(hlc3[_src_shift]) ? _lo : hlc3[_src_shift]
     var float[] bins = array.new_float(0)
-    if array.size(bins) != _bins
+    if array.size(bins) != bins_safe
         array.clear(bins)
-        for bi = 0 to _bins - 1
+        for bi = 0 to bins_safe - 1
             array.push(bins, 0.0)
-    float den = math.max(_hi - _lo, syminfo.mintick)
-    for bi = 0 to _bins - 1
+    for bi = 0 to bins_safe - 1
         array.set(bins, bi, 0.0)
-    for j = 0 to _bars_cap - 1
+    float cum_v = 0.0
+    for j = 0 to bars_cap_safe - 1
         int src = j + _src_shift
-        int idx = f_clamp(int(math.floor((hlc3[src] - _lo) / den * (_bins - 1))), 0, _bins - 1)
-        array.set(bins, idx, array.get(bins, idx) + volume[src])
+        int idx = den_raw > EPS ? f_clamp(int(math.floor((hlc3[src] - _lo) / den * (bins_safe - 1))), 0, bins_safe - 1) : 0
+        float vsrc = math.max(volume[src], 0.0)
+        cum_v += vsrc
+        array.set(bins, idx, array.get(bins, idx) + vsrc)
     float vmax = -1.0
     int max_idx = 0
-    for bi = 0 to _bins - 1
+    for bi = 0 to bins_safe - 1
         float v = array.get(bins, bi)
         if v > vmax
             vmax := v
             max_idx := bi
-    float bw = den / _bins
+    float bw = den / bins_safe
     float poc_fast = _lo + bw * max_idx + bw * 0.5
     float pv = 0.0
     float vv = 0.0
-    for j = 0 to _bars_cap - 1
+    for j = 0 to bars_cap_safe - 1
         int src = j + _src_shift
         float w = math.max(volume[src], 0.0)
         pv += hlc3[src] * w
         vv += w
-    float poc_vwap = vv > 0 ? pv / vv : poc_fast
-    _mode == "EXACT" ? poc_vwap : poc_fast
+    float poc_fast_safe = cum_v > EPS ? poc_fast : fallback_price
+    float poc_vwap = vv > EPS ? pv / vv : poc_fast_safe
+    _mode == "EXACT" ? poc_vwap : poc_fast_safe
 
 f_detect_trigger(bool _has_zone, float _trig, float _entry, int _side) =>
     trigger_mode == "LEGACY_MAX" ? (_has_zone and not na(_trig)) : (_has_zone and not na(_trig) and not na(_entry) and (_side == 1 ? _trig > _entry + EPS : _trig < _entry - EPS))
@@ -168,6 +182,13 @@ float htf2_sec = timeframe.in_seconds(htf2)
 float htf3_sec = timeframe.in_seconds(htf3)
 bool htf_order_ok = not na(htf1_sec) and not na(htf2_sec) and (not use_htf3 or not na(htf3_sec)) and htf1_sec > htf2_sec and (not use_htf3 or htf2_sec > htf3_sec)
 string pp_tf_eff = str.length(pp_tf) > 0 ? pp_tf : ltf
+
+if base_len < min_base_bars
+    runtime.error("base_len must be >= min_base_bars")
+if mode_tf == "MANUAL" and (str.length(manual_htf1) == 0 or str.length(manual_htf2) == 0)
+    runtime.error("MANUAL mode requires both HTF1 and HTF2")
+if max_zones_per_tf < 1 or max_zones_per_tf > 20
+    runtime.error("max_zones_per_tf must be in [1..20]")
 
 f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, float _max_range_atr, int _exit_confirm, int _bins, int _base_max_bars) =>
     float atr = ta.atr(14)
@@ -315,24 +336,28 @@ f_ltf_pack(int _len, int _bins, int _break_len) =>
     float atr = ta.atr(14)
     float ph = ta.highest(high, _len)
     float pl = ta.lowest(low, _len)
-    float den = math.max(ph - pl, syminfo.mintick)
-    var float[] bins = array.new_float(_bins, 0.0)
-    if array.size(bins) != _bins
-        bins := array.new_float(_bins, 0.0)
-    for bi = 0 to _bins - 1
+    int bins_safe = math.max(_bins, 1)
+    float den = ph - pl
+    var float[] bins = array.new_float(bins_safe, 0.0)
+    if array.size(bins) != bins_safe
+        bins := array.new_float(bins_safe, 0.0)
+    for bi = 0 to bins_safe - 1
         array.set(bins, bi, 0.0)
+    float cum_v = 0.0
     for j = 0 to _len - 1
-        int idx = f_clamp(int(math.floor((hlc3[j] - pl) / den * (_bins - 1))), 0, _bins - 1)
-        array.set(bins, idx, array.get(bins, idx) + volume[j])
+        int idx = den > EPS ? f_clamp(int(math.floor((hlc3[j] - pl) / den * (bins_safe - 1))), 0, bins_safe - 1) : 0
+        float vsrc = math.max(volume[j], 0.0)
+        cum_v += vsrc
+        array.set(bins, idx, array.get(bins, idx) + vsrc)
     float vmax = -1.0
     int max_idx = 0
-    for bi = 0 to _bins - 1
+    for bi = 0 to bins_safe - 1
         float vv = array.get(bins, bi)
         if vv > vmax
             vmax := vv
             max_idx := bi
-    float bw = den / _bins
-    float poc = pl + bw * max_idx + bw * 0.5
+    float bw = den > EPS ? den / bins_safe : 0.0
+    float poc = den > EPS and cum_v > EPS ? pl + bw * max_idx + bw * 0.5 : hlc3
     int break_len_safe = math.max(_break_len, 1)
     float trig_up_prev = ta.highest(high, break_len_safe)[1]
     float trig_dn_prev = ta.lowest(low, break_len_safe)[1]
@@ -838,16 +863,16 @@ bool trap_buy_event = has_buy and low < buy_bot and close >= buy_bot
 bool trap_sell_event = has_sell and high > sell_top and close <= sell_top
 string buy_tf = has_buy ? array.get(zones, buy_idx).tf : ""
 string sell_tf = has_sell ? array.get(zones, sell_idx).tf : ""
-float buy_tf_atr = buy_tf == htf1 ? htf1_atr : buy_tf == htf2 ? htf2_atr : na
-float sell_tf_atr = sell_tf == htf1 ? htf1_atr : sell_tf == htf2 ? htf2_atr : na
-float buy_tf_trap_range = buy_tf == htf1 ? htf1_trap_range : buy_tf == htf2 ? htf2_trap_range : na
-float sell_tf_trap_range = sell_tf == htf1 ? htf1_trap_range : sell_tf == htf2 ? htf2_trap_range : na
+float buy_tf_atr = buy_tf == htf1 ? htf1_atr : buy_tf == htf2 ? htf2_atr : buy_tf == htf3 ? htf3_atr : na
+float sell_tf_atr = sell_tf == htf1 ? htf1_atr : sell_tf == htf2 ? htf2_atr : sell_tf == htf3 ? htf3_atr : na
+float buy_tf_trap_range = buy_tf == htf1 ? htf1_trap_range : buy_tf == htf2 ? htf2_trap_range : buy_tf == htf3 ? htf3_trap_range : na
+float sell_tf_trap_range = sell_tf == htf1 ? htf1_trap_range : sell_tf == htf2 ? htf2_trap_range : sell_tf == htf3 ? htf3_trap_range : na
 bool trap_type2_buy = has_buy and close > buy_top and not na(buy_tf_trap_range) and not na(buy_tf_atr) and buy_tf_trap_range <= buy_tf_atr
 bool trap_type2_sell = has_sell and close < sell_bot and not na(sell_tf_trap_range) and not na(sell_tf_atr) and sell_tf_trap_range <= sell_tf_atr
-float buy_tf_vol = buy_tf == htf1 ? htf1_vol : buy_tf == htf2 ? htf2_vol : na
-float buy_tf_vol_ma = buy_tf == htf1 ? htf1_vol_ma : buy_tf == htf2 ? htf2_vol_ma : na
-float sell_tf_vol = sell_tf == htf1 ? htf1_vol : sell_tf == htf2 ? htf2_vol : na
-float sell_tf_vol_ma = sell_tf == htf1 ? htf1_vol_ma : sell_tf == htf2 ? htf2_vol_ma : na
+float buy_tf_vol = buy_tf == htf1 ? htf1_vol : buy_tf == htf2 ? htf2_vol : buy_tf == htf3 ? htf3_vol : na
+float buy_tf_vol_ma = buy_tf == htf1 ? htf1_vol_ma : buy_tf == htf2 ? htf2_vol_ma : buy_tf == htf3 ? htf3_vol_ma : na
+float sell_tf_vol = sell_tf == htf1 ? htf1_vol : sell_tf == htf2 ? htf2_vol : sell_tf == htf3 ? htf3_vol : na
+float sell_tf_vol_ma = sell_tf == htf1 ? htf1_vol_ma : sell_tf == htf2 ? htf2_vol_ma : sell_tf == htf3 ? htf3_vol_ma : na
 bool trap_vol_ok_buy = not trap_use_volume_gate or (has_buy and not na(buy_tf_vol) and not na(buy_tf_vol_ma) and buy_tf_vol <= buy_tf_vol_ma * trap_return_volume_mult)
 bool trap_vol_ok_sell = not trap_use_volume_gate or (has_sell and not na(sell_tf_vol) and not na(sell_tf_vol_ma) and sell_tf_vol <= sell_tf_vol_ma * trap_return_volume_mult)
 bool trap_ok_buy = not use_trap_confirm or ((trap_buy_event or trap_type2_buy) and trap_vol_ok_buy)
@@ -918,8 +943,8 @@ float buy_risk = has_buy and not na(buy_entry_plan) and not na(buy_stop) ? buy_e
 float buy_reward = has_buy and not na(buy_tp) and not na(buy_entry_plan) ? buy_tp - buy_entry_plan : na
 float sell_risk = has_sell and not na(sell_stop) and not na(sell_entry_plan) ? sell_stop - sell_entry_plan : na
 float sell_reward = has_sell and not na(sell_entry_plan) and not na(sell_tp) ? sell_entry_plan - sell_tp : na
-float rr_buy = has_buy ? f_compute_rr(buy_entry_plan, buy_stop, buy_tp, 1) : na
-float rr_sell = has_sell ? f_compute_rr(sell_entry_plan, sell_stop, sell_tp, -1) : na
+float rr_buy = has_buy and buy_risk > EPS and buy_reward > EPS ? buy_reward / buy_risk : na
+float rr_sell = has_sell and sell_risk > EPS and sell_reward > EPS ? sell_reward / sell_risk : na
 bool rr_ok_buy = not use_rr_gate or (has_buy and not na(rr_buy) and rr_buy >= rr_min)
 bool rr_ok_sell = not use_rr_gate or (has_sell and not na(rr_sell) and rr_sell >= rr_min)
 
@@ -957,13 +982,27 @@ string pp_reason_buy = not pp_ok_buy ? "NO_PP" : ""
 string trap_reason_buy = not trap_ok_buy ? "NO_TRAP" : ""
 string osc_reason_buy = not osc_ok_buy ? "OSC_FAIL" : ""
 string ema_reason_buy = not ema_bias_ok_buy ? "EMA_BIAS" : ""
-string trig_reason_buy = not trig_valid_buy ? "TRIG_BAD" : ""
+string trig_reason_buy = not trig_valid_buy ? "TRIG_BAD" : trig_shift_buy or buy_level_changed ? "TRIG_JUMP" : ""
 string rr_reason_sell = not rr_ok_sell ? "RR<MIN" : ""
 string pp_reason_sell = not pp_ok_sell ? "NO_PP" : ""
 string trap_reason_sell = not trap_ok_sell ? "NO_TRAP" : ""
 string osc_reason_sell = not osc_ok_sell ? "OSC_FAIL" : ""
 string ema_reason_sell = not ema_bias_ok_sell ? "EMA_BIAS" : ""
-string trig_reason_sell = not trig_valid_sell ? "TRIG_BAD" : ""
+string trig_reason_sell = not trig_valid_sell ? "TRIG_BAD" : trig_shift_sell or sell_level_changed ? "TRIG_JUMP" : ""
+int block_buy_flags = 0
+block_buy_flags := block_buy_flags | (not rr_ok_buy ? BLOCK_RR : 0)
+block_buy_flags := block_buy_flags | (not pp_ok_buy ? BLOCK_PP : 0)
+block_buy_flags := block_buy_flags | (not trap_ok_buy ? BLOCK_TRAP : 0)
+block_buy_flags := block_buy_flags | (not osc_ok_buy ? BLOCK_OSC : 0)
+block_buy_flags := block_buy_flags | (not ema_bias_ok_buy ? BLOCK_EMA : 0)
+block_buy_flags := block_buy_flags | (trig_shift_buy or buy_level_changed ? BLOCK_TRIG_JUMP : 0)
+int block_sell_flags = 0
+block_sell_flags := block_sell_flags | (not rr_ok_sell ? BLOCK_RR : 0)
+block_sell_flags := block_sell_flags | (not pp_ok_sell ? BLOCK_PP : 0)
+block_sell_flags := block_sell_flags | (not trap_ok_sell ? BLOCK_TRAP : 0)
+block_sell_flags := block_sell_flags | (not osc_ok_sell ? BLOCK_OSC : 0)
+block_sell_flags := block_sell_flags | (not ema_bias_ok_sell ? BLOCK_EMA : 0)
+block_sell_flags := block_sell_flags | (trig_shift_sell or sell_level_changed ? BLOCK_TRIG_JUMP : 0)
 string block_reason_buy = blocked_filters_buy ? str.trim((rr_reason_buy + " " + pp_reason_buy + " " + trap_reason_buy + " " + osc_reason_buy + " " + ema_reason_buy + " " + trig_reason_buy)) : ""
 string block_reason_sell = blocked_filters_sell ? str.trim((rr_reason_sell + " " + pp_reason_sell + " " + trap_reason_sell + " " + osc_reason_sell + " " + ema_reason_sell + " " + trig_reason_sell)) : ""
 string block_hint_buy = f_block_hint(blocked_filters_buy, trig_valid_buy)

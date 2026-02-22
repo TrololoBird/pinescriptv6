@@ -1,6 +1,6 @@
 # Error Prevention Checklist (Pine v6)
 
-Use this checklist before and after edits in `prizrak_trade_setup_detector_v11_7_0.pine`.
+Use this checklist before and after edits in `prizrak_trade_setup_detector_v12_0_0.pine`.
 
 ## 1) Before coding
 - Confirm scope: no interface-contract changes unless explicitly requested.
