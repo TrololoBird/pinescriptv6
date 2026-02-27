@@ -120,20 +120,33 @@ f_calculate_poc(float _lo, float _hi, int _bins, int _bars_cap, int _src_shift, 
     float den_raw = _hi - _lo
     float den = math.max(den_raw, syminfo.mintick)
     float fallback_price = na(hlc3[_src_shift]) ? _lo : hlc3[_src_shift]
-    var float[] bins = array.new_float(0)
-    if array.size(bins) != bins_safe
-        array.clear(bins)
-        for bi = 0 to bins_safe - 1
-            array.push(bins, 0.0)
+    
+    // Initialize bins array only once with correct size
+    var float[] bins = array.new_float(bins_safe, 0.0)
+    
+    // Reset bins to zero without recreating the array
     for bi = 0 to bins_safe - 1
         array.set(bins, bi, 0.0)
+    
     float cum_v = 0.0
+    float pv = 0.0
+    float vv = 0.0
+    
+    // Single loop to calculate both histogram and VWAP
     for j = 0 to bars_cap_safe - 1
         int src = j + _src_shift
+        float w = math.max(volume[src], 0.0)
+        
+        // For histogram calculation
         int idx = den_raw > EPS ? f_clamp(int(math.floor((hlc3[src] - _lo) / den * (bins_safe - 1))), 0, bins_safe - 1) : 0
-        float vsrc = math.max(volume[src], 0.0)
-        cum_v += vsrc
-        array.set(bins, idx, array.get(bins, idx) + vsrc)
+        array.set(bins, idx, array.get(bins, idx) + w)
+        
+        // For VWAP calculation
+        pv += hlc3[src] * w
+        vv += w
+        cum_v += w
+    
+    // Find max bin for fast POC
     float vmax = -1.0
     int max_idx = 0
     for bi = 0 to bins_safe - 1
@@ -141,15 +154,9 @@ f_calculate_poc(float _lo, float _hi, int _bins, int _bars_cap, int _src_shift, 
         if v > vmax
             vmax := v
             max_idx := bi
+    
     float bw = den / bins_safe
     float poc_fast = _lo + bw * max_idx + bw * 0.5
-    float pv = 0.0
-    float vv = 0.0
-    for j = 0 to bars_cap_safe - 1
-        int src = j + _src_shift
-        float w = math.max(volume[src], 0.0)
-        pv += hlc3[src] * w
-        vv += w
     float poc_fast_safe = cum_v > EPS ? poc_fast : fallback_price
     float poc_vwap = vv > EPS ? pv / vv : poc_fast_safe
     _mode == "EXACT" ? poc_vwap : poc_fast_safe
@@ -338,24 +345,33 @@ f_ltf_pack(int _len, int _bins, int _break_len) =>
     float pl = ta.lowest(low, _len)
     int bins_safe = math.max(_bins, 1)
     float den = ph - pl
+    
+    // Initialize bins array only once with correct size
     var float[] bins = array.new_float(bins_safe, 0.0)
-    if array.size(bins) != bins_safe
-        bins := array.new_float(bins_safe, 0.0)
+    
+    // Reset bins to zero without recreating the array
     for bi = 0 to bins_safe - 1
         array.set(bins, bi, 0.0)
+    
     float cum_v = 0.0
+    
+    // Single loop to calculate histogram
     for j = 0 to _len - 1
         int idx = den > EPS ? f_clamp(int(math.floor((hlc3[j] - pl) / den * (bins_safe - 1))), 0, bins_safe - 1) : 0
         float vsrc = math.max(volume[j], 0.0)
         cum_v += vsrc
         array.set(bins, idx, array.get(bins, idx) + vsrc)
+    
     float vmax = -1.0
     int max_idx = 0
+    
+    // Find max bin for POC
     for bi = 0 to bins_safe - 1
         float vv = array.get(bins, bi)
         if vv > vmax
             vmax := vv
             max_idx := bi
+    
     float bw = den > EPS ? den / bins_safe : 0.0
     float poc = den > EPS and cum_v > EPS ? pl + bw * max_idx + bw * 0.5 : hlc3
     int break_len_safe = math.max(_break_len, 1)
