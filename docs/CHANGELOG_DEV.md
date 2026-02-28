@@ -555,3 +555,10 @@ Verification run:
   - guidance hint added (`Следующий шаг: дождитесь подтверждённого пивота`).
 - Added active-zone rendering toggle (`show_active_zones_only`) to reduce history clutter.
 - Added lightweight unit scenarios (`tests_zone_logic.py`) for sideways, impulse-trend, and trap-like selection behavior.
+
+
+## 2026-02-28 — Hotfix: Pine syntax error at line 364
+- User-reported compile error fixed: `Syntax error at input ":="` in HTF3 tuple assignment block.
+- Root cause: Pine tuple destructuring in this context expects `=` assignment; `:=` is invalid syntax for the destructuring list form.
+- Change: replaced `:=` with `=` in `if use_htf3` unpack assignment to `f_safe_security_htf_pack(...)`.
+- Prevention note: compile/runtime feedback from users should be logged with exact message and root cause to avoid repeated regressions.
