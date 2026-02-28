@@ -361,7 +361,7 @@ float htf3_trap_range = na
 int htf3_trend_dir = na
 
 if use_htf3
-    [htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] := f_safe_security_htf_pack(htf3, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)
+    [htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] = f_safe_security_htf_pack(htf3, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)
 plot(htf1_edge_up, "DBG htf1_edge_up", color=color.new(color.green, 100), display=display.data_window)
 plot(htf1_edge_dn, "DBG htf1_edge_dn", color=color.new(color.red, 100), display=display.data_window)
 plot(htf2_edge_up, "DBG htf2_edge_up", color=color.new(color.green, 100), display=display.data_window)
