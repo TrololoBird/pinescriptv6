@@ -339,7 +339,29 @@ f_safe_security_htf_pack(string _tf, int _base_len, int _min_base_bars, float _t
 [htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol, htf1_vol_ma, htf1_stop_up, htf1_stop_dn, htf1_stop_poc, htf1_stop_bh, htf1_stop_bl, htf1_trap_range, htf1_trend_dir] = f_safe_security_htf_pack(htf1, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)
 [htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol, htf2_vol_ma, htf2_stop_up, htf2_stop_dn, htf2_stop_poc, htf2_stop_bh, htf2_stop_bl, htf2_trap_range, htf2_trend_dir] = f_safe_security_htf_pack(htf2, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)
 
-[htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] = use_htf3 ? f_safe_security_htf_pack(htf3, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars) : na
+float htf3_edge_up = na
+float htf3_edge_dn = na
+float htf3_atr = na
+float htf3_bh = na
+float htf3_bl = na
+float htf3_poc = na
+float htf3_timef = na
+float htf3_close = na
+float htf3_open = na
+float htf3_high = na
+float htf3_low = na
+float htf3_vol = na
+float htf3_vol_ma = na
+float htf3_stop_up = na
+float htf3_stop_dn = na
+float htf3_stop_poc = na
+float htf3_stop_bh = na
+float htf3_stop_bl = na
+float htf3_trap_range = na
+int htf3_trend_dir = na
+
+if use_htf3
+    [htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] := f_safe_security_htf_pack(htf3, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)
 plot(htf1_edge_up, "DBG htf1_edge_up", color=color.new(color.green, 100), display=display.data_window)
 plot(htf1_edge_dn, "DBG htf1_edge_dn", color=color.new(color.red, 100), display=display.data_window)
 plot(htf2_edge_up, "DBG htf2_edge_up", color=color.new(color.green, 100), display=display.data_window)
