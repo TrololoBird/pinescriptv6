@@ -1,5 +1,16 @@
 # DEV Changelog
 
+## 2026-02-28 — v12.2.0: Methodology alignment + MTF anti-repainting + enhanced zone tracking
+
+- Updated minimum RR from 1.8 to 3.0 as per PrizrakTrade methodology gold standard 1:3 in `rr_min` input parameter
+- Added MTF anti-repainting protection via `f_safe_security()` wrapper function that uses `barstate.isconfirmed` for safe historical requests
+- Enhanced zone lifecycle tracking with `reactionCount` field and `isWeak` flag to track strong reactions and mark weakened levels after first reaction
+- Added comprehensive NA checks for all HTF data variables to prevent errors when data is unavailable
+- Implemented fakeout/breakout detection functions (`f_is_fakeout`/`f_is_breakout`) for better market structure analysis
+- Improved stop-loss calculation with dual modes (safe/risky) according to methodology
+- Enhanced visual feedback with status-color coding and dashed borders for weakened levels
+- Added proper zone removal handling in loops to avoid index errors
+
 ## 2026-02-21 — v12: POC mode wiring + TF guards + HUD diagnostics
 
 - Wired `poc_proxy_mode` into runtime POC calculation in `prizrak_trade_setup_detector_v12_0_0.pine`:
