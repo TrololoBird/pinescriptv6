@@ -1174,11 +1174,16 @@ if draw_now
         color side_col = typ == 1 ? color.lime : color.red
         int fill_opa = tfz == htf1 ? 80 : 90
         if not na(bx)
-            // Цвет по статусу зоны
-            color zone_status_color = z.status == Z_ACTIVE ? side_col : 
-                                      z.status == Z_TOUCHED ? color.yellow : 
-                                      z.status == Z_CONSUMED ? color.gray : 
-                                      z.status == Z_INVALID ? color.red : color.blue
+            // Цвет по статусу зоны (исправлено: if-else вместо многострочного тернара)
+            color zone_status_color = color.blue
+            if z.status == Z_ACTIVE
+                zone_status_color := side_col
+            else if z.status == Z_TOUCHED
+                zone_status_color := color.yellow
+            else if z.status == Z_CONSUMED
+                zone_status_color := color.gray
+            else if z.status == Z_INVALID
+                zone_status_color := color.red
             
             // Стиль линии для слабых уровней
             int border_width = z.isWeak ? 1 : (is_active ? 2 : 1)
