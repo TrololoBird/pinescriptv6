@@ -630,7 +630,10 @@ f_zone_update_lifecycle(int i, bool _draw_now) =>
         removed := true
     else
         array.set(zones, i, z)
-        f_zone_update_visual(i, _draw_now)
+    
+    f_zone_update_visual(i, _draw_now)
+    
+    // Явный возврат кортежа
     [consumed_evt, invalid_evt, flip_armed_evt, flipped_evt, flip_expired_evt, removed]
 
 f_zone_htf_dir(string _tf) =>
