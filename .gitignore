@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes. The modified file 'prizrak_trade_setup_detector_v12_0_0.pine' is a Pine Script source code file and should not be added to .gitignore. Since there are no build artifacts, dependencies, or temporary files in the changes, no additional ignore rules are needed.
+(prizrak_trade_setup_detector_v12_0_0.pine is a Pine Script file, which is source code, so no need to add to .gitignore)
