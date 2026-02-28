@@ -530,7 +530,7 @@ type Zone
     label label_id
 
 var Zone[] zones = array.new<Zone>()
-var int zid_seq = 0
+var int[] zid_seq_ref = array.new_int(1, 0)
 var label[] event_icons = array.new_label()
 var int active_buy_zone_id = na
 var int active_sell_zone_id = na
@@ -569,7 +569,8 @@ f_clear_icons() =>
             label.delete(old)
 
 f_zone_add(int _type, string _tf, float _poc, float _atr, int _t, float _bhi, float _blo, string _origin) =>
-    zid_seq += 1
+    int zid_seq = array.get(zid_seq_ref, 0) + 1
+    array.set(zid_seq_ref, 0, zid_seq)
     float pad = _atr * htf_poc_pad_mult
     float top = _poc + pad
     float bot = _poc - pad
