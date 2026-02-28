@@ -331,15 +331,15 @@ f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, floa
     [edge_up ? 1.0 : 0.0, edge_dn ? 1.0 : 0.0, atr, b_hi, b_lo, poc, time * 1.0, close, open, high, low, volume, vol_ma, stop_edge_up ? 1.0 : 0.0, stop_edge_dn ? 1.0 : 0.0, stop_poc, stop_bhi, stop_blo, ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars), trend_dir]
 
 // Функция безопасного MTF-запроса (защита от репайнтинга в replay)
-f_safe_security(string _tf, _expression) =>
+f_safe_security_htf_pack(string _tf, int _base_len, int _min_base_bars, float _touch_tolerance, int _min_touches, float _max_range_atr, int _exit_confirm_bars, int _htf_poc_bins, int _base_max_bars) =>
     int tf_ms = timeframe.in_seconds(_tf) * 1000
     int request_time = barstate.isconfirmed ? time : time - tf_ms
-    request.security(syminfo.tickerid, _tf, _expression, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    request.security(syminfo.tickerid, _tf, f_htf_pack(_base_len, _min_base_bars, _touch_tolerance, _min_touches, _max_range_atr, _exit_confirm_bars, _htf_poc_bins, _base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 
-[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol, htf1_vol_ma, htf1_stop_up, htf1_stop_dn, htf1_stop_poc, htf1_stop_bh, htf1_stop_bl, htf1_trap_range, htf1_trend_dir] = f_safe_security(htf1, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars))
-[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol, htf2_vol_ma, htf2_stop_up, htf2_stop_dn, htf2_stop_poc, htf2_stop_bh, htf2_stop_bl, htf2_trap_range, htf2_trend_dir] = f_safe_security(htf2, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars))
+[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol, htf1_vol_ma, htf1_stop_up, htf1_stop_dn, htf1_stop_poc, htf1_stop_bh, htf1_stop_bl, htf1_trap_range, htf1_trend_dir] = f_safe_security_htf_pack(htf1, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)
+[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol, htf2_vol_ma, htf2_stop_up, htf2_stop_dn, htf2_stop_poc, htf2_stop_bh, htf2_stop_bl, htf2_trap_range, htf2_trend_dir] = f_safe_security_htf_pack(htf2, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)
 
-[htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] = use_htf3 ? f_safe_security(htf3, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)) : na
+[htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] = use_htf3 ? f_safe_security_htf_pack(htf3, base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars) : na
 plot(htf1_edge_up, "DBG htf1_edge_up", color=color.new(color.green, 100), display=display.data_window)
 plot(htf1_edge_dn, "DBG htf1_edge_dn", color=color.new(color.red, 100), display=display.data_window)
 plot(htf2_edge_up, "DBG htf2_edge_up", color=color.new(color.green, 100), display=display.data_window)
@@ -1281,7 +1281,7 @@ type Event
     string t
     string side
     string kind
-    string text
+    string msg
 
 var Event[] events = array.new<Event>()
 int audit_keep = 10
@@ -1295,7 +1295,7 @@ f_event_prune() =>
 
 f_event_render_row(int _idx) =>
     Event ev = array.get(events, _idx)
-    [ev.t, ev.side + "/" + ev.kind + ": " + ev.text]
+    [ev.t, ev.side + "/" + ev.kind + ": " + ev.msg]
 
 if zone_created
     f_event_push("SYS", "zone", "zone_created")
