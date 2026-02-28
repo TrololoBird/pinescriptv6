@@ -279,14 +279,14 @@ f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, floa
             st := BASE_SEEK
 
         if st == BASE_VALID and (out_up >= _exit_confirm or out_dn >= _exit_confirm)
-                edge_up := out_up >= _exit_confirm
-                edge_dn := out_dn >= _exit_confirm
-                st := edge_up ? BASE_BREAK_UP : BASE_BREAK_DN
-                b_hi := prev_hi
-                b_lo := prev_lo
-                int bars_cap = math.max(math.min(base_bars, _base_max_bars), 1)
-                int break_span = math.max(out_up, out_dn)
-                poc := f_calculate_poc(b_lo, b_hi, _bins, bars_cap, break_span, poc_proxy_mode)
+            edge_up := out_up >= _exit_confirm
+            edge_dn := out_dn >= _exit_confirm
+            st := edge_up ? BASE_BREAK_UP : BASE_BREAK_DN
+            b_hi := prev_hi
+            b_lo := prev_lo
+            int bars_cap = math.max(math.min(base_bars, _base_max_bars), 1)
+            int break_span = math.max(out_up, out_dn)
+            poc := f_calculate_poc(b_lo, b_hi, _bins, bars_cap, break_span, poc_proxy_mode)
 
     if st == BASE_BREAK_UP or st == BASE_BREAK_DN
         st := BASE_SEEK
