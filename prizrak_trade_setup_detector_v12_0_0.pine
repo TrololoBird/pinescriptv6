@@ -632,7 +632,7 @@ f_zone_update_lifecycle(int i, bool _draw_now) =>
         array.set(zones, i, z)
     
     f_zone_update_visual(i, _draw_now)
-    
+
     // Явный возврат кортежа
     [consumed_evt, invalid_evt, flip_armed_evt, flipped_evt, flip_expired_evt, removed]
 
