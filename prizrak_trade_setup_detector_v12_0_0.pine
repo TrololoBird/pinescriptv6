@@ -1165,11 +1165,12 @@ else
 
 if draw_now
     for i = 0 to array.size(zones) - 1
-        box bx = array.get(zones, i).box_id
-        label lb = array.get(zones, i).label_id
-        int typ = array.get(zones, i).typ
-        string tfz = array.get(zones, i).tf
-        bool is_active = array.get(zones, i).id == active_buy_zone_id or array.get(zones, i).id == active_sell_zone_id
+        Zone z = array.get(zones, i)  // ✅ ОБЪЯВЛЯЕМ z ЗДЕСЬ
+        box bx = z.box_id
+        label lb = z.label_id
+        int typ = z.typ
+        string tfz = z.tf
+        bool is_active = z.id == active_buy_zone_id or z.id == active_sell_zone_id
         color side_col = typ == 1 ? color.lime : color.red
         int fill_opa = tfz == htf1 ? 80 : 90
         if not na(bx)
@@ -1187,7 +1188,7 @@ if draw_now
             box.set_border_color(bx, color.new(zone_status_color, is_active ? 0 : 25))
             box.set_border_width(bx, border_width)
         if not na(lb)
-            label.set_text(lb, (typ == 1 ? "BUY " : "SELL ") + tfz + " T:" + str.tostring(array.get(zones, i).touch) + (is_active ? " ACTIVE" : ""))
+            label.set_text(lb, (typ == 1 ? "BUY " : "SELL ") + tfz + " T:" + str.tostring(z.touch) + (is_active ? " ACTIVE" : ""))
             label.set_color(lb, color.new(side_col, is_active ? 5 : 20))
 
 plot(show_rr_lines_eff and has_buy ? buy_entry_plan : na, "BUY entry", color=color.new(color.lime, 0), linewidth=1, style=plot.style_linebr)
