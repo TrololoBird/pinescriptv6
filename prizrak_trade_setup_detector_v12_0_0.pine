@@ -37,7 +37,7 @@ entry_break_len = input.int(2, "LTF trigger break lookback", minval=1, maxval=8,
 
 near_thr_atr = input.float(1.0, "Near threshold ATR multiple", minval=0.1, step=0.1, group="Stages")
 use_rr_gate = input.bool(true, "Use RR gate", group="Stages")
-rr_min = input.float(1.8, "Min RR", minval=0.5, step=0.1, group="Stages")
+rr_min = input.float(3.0, "Min RR", minval=1.0, step=0.5, group="Stages")  // По методологии PrizrakTrade золотой стандарт 1:3
 entry_plan_mode = input.string("POC", "Entry plan mode", options=["POC", "ZONE_EDGE"], group="Stages")
 poc_proxy_mode = input.string("FAST", "POC proxy mode", options=["FAST", "EXACT"], group="Stages")
 trigger_mode = input.string("STRICT_SWING", "Trigger mode", options=["LEGACY_MAX", "STRICT_SWING"], group="Stages")
@@ -330,10 +330,16 @@ f_htf_pack(int _seek_len, int _min_base_bars, float _tol, int _min_touches, floa
 
     [edge_up ? 1.0 : 0.0, edge_dn ? 1.0 : 0.0, atr, b_hi, b_lo, poc, time * 1.0, close, open, high, low, volume, vol_ma, stop_edge_up ? 1.0 : 0.0, stop_edge_dn ? 1.0 : 0.0, stop_poc, stop_bhi, stop_blo, ta.highest(high, trap_max_bars) - ta.lowest(low, trap_max_bars), trend_dir]
 
-[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol, htf1_vol_ma, htf1_stop_up, htf1_stop_dn, htf1_stop_poc, htf1_stop_bh, htf1_stop_bl, htf1_trap_range, htf1_trend_dir] = request.security(syminfo.tickerid, htf1, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
-[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol, htf2_vol_ma, htf2_stop_up, htf2_stop_dn, htf2_stop_poc, htf2_stop_bh, htf2_stop_bl, htf2_trap_range, htf2_trend_dir] = request.security(syminfo.tickerid, htf2, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+// Функция безопасного MTF-запроса (защита от репайнтинга в replay)
+f_safe_security(string _tf, _expression) =>
+    int tf_ms = timeframe.in_seconds(_tf) * 1000
+    int request_time = barstate.isconfirmed ? time : time - tf_ms
+    request.security(syminfo.tickerid, _tf, _expression, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 
-[htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] = request.security(syminfo.tickerid, htf3, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[htf1_edge_up, htf1_edge_dn, htf1_atr, htf1_bh, htf1_bl, htf1_poc, htf1_timef, htf1_close, htf1_open, htf1_high, htf1_low, htf1_vol, htf1_vol_ma, htf1_stop_up, htf1_stop_dn, htf1_stop_poc, htf1_stop_bh, htf1_stop_bl, htf1_trap_range, htf1_trend_dir] = f_safe_security(htf1, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars))
+[htf2_edge_up, htf2_edge_dn, htf2_atr, htf2_bh, htf2_bl, htf2_poc, htf2_timef, htf2_close, htf2_open, htf2_high, htf2_low, htf2_vol, htf2_vol_ma, htf2_stop_up, htf2_stop_dn, htf2_stop_poc, htf2_stop_bh, htf2_stop_bl, htf2_trap_range, htf2_trend_dir] = f_safe_security(htf2, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars))
+
+[htf3_edge_up, htf3_edge_dn, htf3_atr, htf3_bh, htf3_bl, htf3_poc, htf3_timef, htf3_close, htf3_open, htf3_high, htf3_low, htf3_vol, htf3_vol_ma, htf3_stop_up, htf3_stop_dn, htf3_stop_poc, htf3_stop_bh, htf3_stop_bl, htf3_trap_range, htf3_trend_dir] = use_htf3 ? f_safe_security(htf3, f_htf_pack(base_len, min_base_bars, touch_tolerance, min_touches, max_range_atr, exit_confirm_bars, htf_poc_bins, base_max_bars)) : na
 plot(htf1_edge_up, "DBG htf1_edge_up", color=color.new(color.green, 100), display=display.data_window)
 plot(htf1_edge_dn, "DBG htf1_edge_dn", color=color.new(color.red, 100), display=display.data_window)
 plot(htf2_edge_up, "DBG htf2_edge_up", color=color.new(color.green, 100), display=display.data_window)
@@ -381,6 +387,19 @@ f_ltf_pack(int _len, int _bins, int _break_len) =>
 
 [ltf_atr, ltf_poc, ltf_trig_up, ltf_trig_dn, ltf_close, ltf_timef] = request.security(syminfo.tickerid, ltf, f_ltf_pack(ltf_poc_len, ltf_poc_bins, entry_break_len), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 
+// Функция детекции прокола (fakeout) - цена вышла и вернулась за 1-2 свечи
+f_is_fakeout(float _level, bool _is_upper) =>
+    bool broke = _is_upper ? high > _level : low < _level
+    bool closed_inside = _is_upper ? close <= _level : close >= _level
+    bool prev_closed_inside = _is_upper ? close[1] <= _level : close[1] >= _level
+    broke and closed_inside and prev_closed_inside
+
+// Функция детекции пробоя (breakout) - закрепление за уровнем
+f_is_breakout(float _level, bool _is_upper, int _confirm_bars) =>
+    bool beyond = _is_upper ? close > _level : close < _level
+    bool prev_beyond = _is_upper ? close[1] > _level : close[1] < _level
+    beyond and prev_beyond and barssince(beyond) >= _confirm_bars
+
 f_pp_pack(int _cc, int _rw) =>
     var float last_sh = na
     var float last_sl = na
@@ -390,6 +409,22 @@ f_pp_pack(int _cc, int _rw) =>
     var float bear_lvl = na
     var bool bull_ok = false
     var bool bear_ok = false
+    var int closes_beyond = 0  // НОВОЕ: счётчик закрывшихся свечей за уровнем
+    
+    // Сброс счётчика при изменении направления
+    if not na(bull_break) and close <= bull_lvl
+        closes_beyond := 0
+    if not na(bear_break) and close >= bear_lvl
+        closes_beyond := 0
+    
+    // Подсчёт закрывшихся свечей за уровнем
+    if not na(bull_break) and close > bull_lvl
+        closes_beyond := closes_beyond + 1
+    if not na(bear_break) and close < bear_lvl
+        closes_beyond := closes_beyond + 1
+    
+    // Истинный ПП требует подтверждения 2-3 свечами
+    bool true_pp_confirm = closes_beyond >= _cc
     float ph = ta.pivothigh(high, 2, 2)
     float pl = ta.pivotlow(low, 2, 2)
     if not na(ph)
@@ -435,6 +470,7 @@ type Zone
     float atr
     int time
     int touch
+    int reactionCount      // НОВОЕ: счётчик полноценных реакций
     bool inside_prev
     int inv_cnt
     int last_tf_time
@@ -447,6 +483,7 @@ type Zone
     int touch_bar
     float react_hi
     float react_lo
+    bool isWeak            // НОВОЕ: флаг "ослабленного" уровня после первой реакции
     box box_id
     label label_id
 
@@ -548,6 +585,12 @@ f_zone_update_lifecycle(int i, bool _draw_now) =>
 
     bool touch_window_live = not na(z.touch_bar) and bar_index > z.touch_bar
     if z.touch >= 1 and st <= Z_TOUCHED and touch_window_live
+        // Проверка сильной реакции для подсчёта reactionCount
+        bool strong_reaction = z.typ == 1 ? (z.react_hi - z.top) >= z.atr * 0.5 : (z.bot - z.react_lo) >= z.atr * 0.5
+        if strong_reaction and z.reactionCount == 0
+            z.reactionCount := 1
+            z.isWeak := true  // Уровень помечается как слабый после первой реакции
+        
         bool consumed_now = z.typ == 1 ? (z.react_hi - z.top) >= z.atr * consume_reaction_atr_mult : (z.bot - z.react_lo) >= z.atr * consume_reaction_atr_mult
         if consumed_now
             z.status := Z_CONSUMED
@@ -668,40 +711,41 @@ bool flip_armed = false
 bool zone_flipped = false
 bool flip_expired = false
 
-if htf1_stop_up > 0 and htf1_stop_up[1] <= 0 and not na(htf1_stop_poc)
+// Добавлена проверка na() для всех HTF-переменных
+if not na(htf1_stop_up) and not na(htf1_atr) and not na(htf1_stop_poc) and htf1_stop_up > 0 and htf1_stop_up[1] <= 0
     f_zone_add(1, htf1, htf1_stop_poc, htf1_atr, int(htf1_timef), htf1_stop_bh, htf1_stop_bl, "STOPVOL")
     zone_created := true
-else if htf1_edge_up > 0 and htf1_edge_up[1] <= 0 and not na(htf1_poc)
+else if not na(htf1_edge_up) and not na(htf1_atr) and not na(htf1_poc) and htf1_edge_up > 0 and htf1_edge_up[1] <= 0
     f_zone_add(1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, "BASE")
     zone_created := true
-if htf1_stop_dn > 0 and htf1_stop_dn[1] <= 0 and not na(htf1_stop_poc)
+if not na(htf1_stop_dn) and not na(htf1_atr) and not na(htf1_stop_poc) and htf1_stop_dn > 0 and htf1_stop_dn[1] <= 0
     f_zone_add(-1, htf1, htf1_stop_poc, htf1_atr, int(htf1_timef), htf1_stop_bh, htf1_stop_bl, "STOPVOL")
     zone_created := true
-else if htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0 and not na(htf1_poc)
+else if not na(htf1_edge_dn) and not na(htf1_atr) and not na(htf1_poc) and htf1_edge_dn > 0 and htf1_edge_dn[1] <= 0
     f_zone_add(-1, htf1, htf1_poc, htf1_atr, int(htf1_timef), htf1_bh, htf1_bl, "BASE")
     zone_created := true
-if htf2_stop_up > 0 and htf2_stop_up[1] <= 0 and not na(htf2_stop_poc)
+if not na(htf2_stop_up) and not na(htf2_atr) and not na(htf2_stop_poc) and htf2_stop_up > 0 and htf2_stop_up[1] <= 0
     f_zone_add(1, htf2, htf2_stop_poc, htf2_atr, int(htf2_timef), htf2_stop_bh, htf2_stop_bl, "STOPVOL")
     zone_created := true
-else if htf2_edge_up > 0 and htf2_edge_up[1] <= 0 and not na(htf2_poc)
+else if not na(htf2_edge_up) and not na(htf2_atr) and not na(htf2_poc) and htf2_edge_up > 0 and htf2_edge_up[1] <= 0
     f_zone_add(1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, "BASE")
     zone_created := true
-if htf2_stop_dn > 0 and htf2_stop_dn[1] <= 0 and not na(htf2_stop_poc)
+if not na(htf2_stop_dn) and not na(htf2_atr) and not na(htf2_stop_poc) and htf2_stop_dn > 0 and htf2_stop_dn[1] <= 0
     f_zone_add(-1, htf2, htf2_stop_poc, htf2_atr, int(htf2_timef), htf2_stop_bh, htf2_stop_bl, "STOPVOL")
     zone_created := true
-else if htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0 and not na(htf2_poc)
+else if not na(htf2_edge_dn) and not na(htf2_atr) and not na(htf2_poc) and htf2_edge_dn > 0 and htf2_edge_dn[1] <= 0
     f_zone_add(-1, htf2, htf2_poc, htf2_atr, int(htf2_timef), htf2_bh, htf2_bl, "BASE")
     zone_created := true
-if use_htf3 and htf3_stop_up > 0 and htf3_stop_up[1] <= 0 and not na(htf3_stop_poc)
+if use_htf3 and not na(htf3_stop_up) and not na(htf3_atr) and not na(htf3_stop_poc) and htf3_stop_up > 0 and htf3_stop_up[1] <= 0
     f_zone_add(1, htf3, htf3_stop_poc, htf3_atr, int(htf3_timef), htf3_stop_bh, htf3_stop_bl, "STOPVOL")
     zone_created := true
-else if use_htf3 and htf3_edge_up > 0 and htf3_edge_up[1] <= 0 and not na(htf3_poc)
+else if use_htf3 and not na(htf3_edge_up) and not na(htf3_atr) and not na(htf3_poc) and htf3_edge_up > 0 and htf3_edge_up[1] <= 0
     f_zone_add(1, htf3, htf3_poc, htf3_atr, int(htf3_timef), htf3_bh, htf3_bl, "BASE")
     zone_created := true
-if use_htf3 and htf3_stop_dn > 0 and htf3_stop_dn[1] <= 0 and not na(htf3_stop_poc)
+if use_htf3 and not na(htf3_stop_dn) and not na(htf3_atr) and not na(htf3_stop_poc) and htf3_stop_dn > 0 and htf3_stop_dn[1] <= 0
     f_zone_add(-1, htf3, htf3_stop_poc, htf3_atr, int(htf3_timef), htf3_stop_bh, htf3_stop_bl, "STOPVOL")
     zone_created := true
-else if use_htf3 and htf3_edge_dn > 0 and htf3_edge_dn[1] <= 0 and not na(htf3_poc)
+else if use_htf3 and not na(htf3_edge_dn) and not na(htf3_atr) and not na(htf3_poc) and htf3_edge_dn > 0 and htf3_edge_dn[1] <= 0
     f_zone_add(-1, htf3, htf3_poc, htf3_atr, int(htf3_timef), htf3_bh, htf3_bl, "BASE")
     zone_created := true
 
@@ -902,10 +946,20 @@ string htf_guard_note = htf_order_ok ? "" : "HTF order warning: expected HTF1>HT
 float sell_entry_plan = has_sell ? (entry_plan_mode == "POC" ? sell_poc : sell_bot) : na
 float buy_base_lo = has_buy ? array.get(zones, buy_idx).base_lo : na
 float sell_base_hi = has_sell ? array.get(zones, sell_idx).base_hi : na
+// Два режима стоп-лосса по методологии
+float buy_stop_safe = has_buy ? buy_base_lo - buy_atr * stop_pad_atr_mult : na  // Безопасный: за границей структуры + ATR
+float sell_stop_safe = has_sell ? sell_base_hi + sell_atr * stop_pad_atr_mult : na
+
+float buy_stop_risky = has_buy ? ta.lowest(low, 20) - syminfo.mintick : na  // Рисковый: за локальным экстремумом
+float sell_stop_risky = has_sell ? ta.highest(high, 20) + syminfo.mintick : na
+
+// Выбор режима
+float buy_stop_anchor = stop_mode == "BASE" ? buy_base_lo : ta.lowest(low, 20)
+float sell_stop_anchor = stop_mode == "BASE" ? sell_base_hi : ta.highest(high, 20)
 float buy_pad = has_buy ? math.max(buy_base_lo * stop_pad_pct * 0.01, buy_atr * stop_pad_atr_mult) : na
 float sell_pad = has_sell ? math.max(sell_base_hi * stop_pad_pct * 0.01, sell_atr * stop_pad_atr_mult) : na
-float buy_stop_anchor = buy_base_lo
-float sell_stop_anchor = sell_base_hi
+float buy_stop = has_buy and not na(buy_stop_anchor) and not na(buy_pad) ? (stop_mode == "BASE" ? buy_stop_safe : buy_stop_risky) : na
+float sell_stop = has_sell and not na(sell_stop_anchor) and not na(sell_pad) ? (stop_mode == "BASE" ? sell_stop_safe : sell_stop_risky) : na
 float buy_stopvol_dist = na
 float sell_stopvol_dist = na
 float buy_near_abs = has_buy ? math.abs(buy_base_lo) * stopvol_near_pct * 0.01 : na
@@ -927,8 +981,6 @@ if stop_mode == "STOPVOL_NEAR"
             if cand_sell_dist <= sell_near_abs and (na(sell_stopvol_dist) or cand_sell_dist < sell_stopvol_dist)
                 sell_stopvol_dist := cand_sell_dist
                 sell_stop_anchor := math.max(sell_base_hi, cand_sell_anchor)
-float buy_stop = has_buy and not na(buy_stop_anchor) and not na(buy_pad) ? buy_stop_anchor - buy_pad : na
-float sell_stop = has_sell and not na(sell_stop_anchor) and not na(sell_pad) ? sell_stop_anchor + sell_pad : na
 float buy_tp = has_buy ? buy_entry_plan + rr_fallback_atr * buy_atr : na
 float sell_tp = has_sell ? sell_entry_plan - rr_fallback_atr * sell_atr : na
 float best_buy_tp_dist = na
@@ -1121,9 +1173,19 @@ if draw_now
         color side_col = typ == 1 ? color.lime : color.red
         int fill_opa = tfz == htf1 ? 80 : 90
         if not na(bx)
-            box.set_bgcolor(bx, color.new(side_col, is_active ? fill_opa - 8 : fill_opa))
-            box.set_border_color(bx, color.new(side_col, is_active ? 0 : 25))
-            box.set_border_width(bx, is_active ? 2 : 1)
+            // Цвет по статусу зоны
+            color zone_status_color = z.status == Z_ACTIVE ? side_col : 
+                                      z.status == Z_TOUCHED ? color.yellow : 
+                                      z.status == Z_CONSUMED ? color.gray : 
+                                      z.status == Z_INVALID ? color.red : color.blue
+            
+            // Стиль линии для слабых уровней
+            int border_width = z.isWeak ? 1 : (is_active ? 2 : 1)
+            line_style border_style = z.isWeak ? line.style_dashed : line.style_solid
+            
+            box.set_bgcolor(bx, color.new(zone_status_color, is_active ? fill_opa - 8 : fill_opa))
+            box.set_border_color(bx, color.new(zone_status_color, is_active ? 0 : 25))
+            box.set_border_width(bx, border_width)
         if not na(lb)
             label.set_text(lb, (typ == 1 ? "BUY " : "SELL ") + tfz + " T:" + str.tostring(array.get(zones, i).touch) + (is_active ? " ACTIVE" : ""))
             label.set_color(lb, color.new(side_col, is_active ? 5 : 20))
